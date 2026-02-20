@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { visual, shotType } = await req.json();
+    const { visual, shotType, imageRatio } = await req.json();
     const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
     if (!ZHIPU_API_KEY) {
       return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
@@ -25,7 +25,18 @@ serve(async (req) => {
       });
     }
 
-    const prompt = `生成一张电影分镜参考图。景别：${shotType || '中景'}。画面描述：${visual}。风格：写实风格，电影感光影，16:9画幅，专业摄影构图。`;
+    // Map ratio to CogView size
+    const RATIO_SIZE_MAP: Record<string, string> = {
+      '16:9': '1440x720',
+      '9:16': '720x1440',
+      '1:1': '1024x1024',
+      '4:3': '1024x768',
+      '3:4': '768x1024',
+    };
+    const size = RATIO_SIZE_MAP[imageRatio] || '1440x720';
+    const ratioLabel = imageRatio || '16:9';
+
+    const prompt = `生成一张电影分镜参考图。景别：${shotType || '中景'}。画面描述：${visual}。风格：写实风格，电影感光影，${ratioLabel}画幅，专业摄影构图。`;
 
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/images/generations', {
       method: 'POST',
@@ -36,7 +47,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'cogview-4',
         prompt,
-        size: '1440x720',
+        size,
       }),
     });
 

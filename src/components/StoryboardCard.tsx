@@ -85,13 +85,17 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
     zIndex: isDragging ? 50 : undefined,
   };
 
+  const [imageRatio, setImageRatio] = useState('16:9');
+
+  const IMAGE_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
+
   const handleGenerateImage = async () => {
     if (!shot.visual.trim()) return;
     playClick();
     setIsGeneratingImage(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-shot-image', {
-        body: { visual: shot.visual, shotType: shot.shotType },
+        body: { visual: shot.visual, shotType: shot.shotType, imageRatio },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -190,15 +194,25 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
             onChange={(v) => onUpdate(shot.id, 'visual', v)}
             multiline
           />
-          <button
-            onClick={handleGenerateImage}
-            disabled={isGeneratingImage || !shot.visual.trim()}
-            className="absolute top-0 right-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-scarlet hover:bg-scarlet/5 transition-all duration-300 disabled:opacity-30"
-            title="AI 生成参考配图"
-          >
-            {isGeneratingImage ? <Loader2 size={10} className="animate-spin" /> : <ImagePlus size={10} strokeWidth={2} />}
-            AI配图
-          </button>
+          <div className="absolute top-0 right-0 flex items-center gap-1">
+            <select
+              value={imageRatio}
+              onChange={(e) => setImageRatio(e.target.value)}
+              className="bg-transparent text-[10px] text-muted-foreground/50 border border-border/50 rounded px-1 py-0.5 outline-none cursor-pointer hover:border-border"
+              title="选择配图比例"
+            >
+              {IMAGE_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <button
+              onClick={handleGenerateImage}
+              disabled={isGeneratingImage || !shot.visual.trim()}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-scarlet hover:bg-scarlet/5 transition-all duration-300 disabled:opacity-30"
+              title="AI 生成参考配图"
+            >
+              {isGeneratingImage ? <Loader2 size={10} className="animate-spin" /> : <ImagePlus size={10} strokeWidth={2} />}
+              AI配图
+            </button>
+          </div>
         </div>
 
         {/* Dialogue + AI generate + VoiceOver */}

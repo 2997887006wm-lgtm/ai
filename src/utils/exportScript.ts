@@ -1,6 +1,8 @@
 import type { Shot } from '@/components/StoryboardCard';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, HeadingLevel, BorderStyle, AlignmentType } from 'docx';
+import { saveAs } from 'file-saver';
 
 /* ── Markdown ─────────────────────────────────── */
 
@@ -110,6 +112,52 @@ function buildPrintableHtml(shots: Shot[]): string {
   </table>
 </body>
 </html>`;
+}
+
+/* ── Word (.docx) ─────────────────────────────── */
+
+export async function exportAsWord(shots: Shot[]) {
+  const headerCells = ['镜号', '景别', '时长', '角色', '画面描述', '台词', '音效', '导演备注'];
+  
+  const headerRow = new TableRow({
+    children: headerCells.map(text => new TableCell({
+      children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 20, font: 'Microsoft YaHei' })] })],
+      shading: { fill: 'f0f0f0' },
+    })),
+  });
+
+  const dataRows = shots.map(s => new TableRow({
+    children: [
+      s.shotNumber, s.shotType, s.duration, s.character || '—',
+      s.visual, s.dialogue || '—', s.audio || '—', s.directorNote || '—',
+    ].map(text => new TableCell({
+      children: [new Paragraph({ children: [new TextRun({ text, size: 18, font: 'Microsoft YaHei' })] })],
+    })),
+  }));
+
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({
+          children: [new TextRun({ text: '脚本文档', bold: true, size: 36, font: 'Microsoft YaHei' })],
+          heading: HeadingLevel.HEADING_1,
+          alignment: AlignmentType.CENTER,
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `共 ${shots.length} 个分镜 · ${new Date().toLocaleString('zh-CN')}`, size: 18, color: '888888', font: 'Microsoft YaHei' })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        }),
+        new Table({
+          rows: [headerRow, ...dataRows],
+          width: { size: 100, type: WidthType.PERCENTAGE },
+        }),
+      ],
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `脚本文档_${dateSuffix()}.docx`);
 }
 
 /* ── Legacy TXT (kept for backward compat) ────── */
