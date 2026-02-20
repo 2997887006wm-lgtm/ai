@@ -79,7 +79,7 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
           character: '',
           duration: '',
           mode: 'narration',
-          customPrompt: `请为以下视频脚本生成一个简短有力的中文标题（不超过15字，不加引号不加标点）：\n灵感：${inspiration}\n内容：${context}`,
+          customPrompt: `请为以下视频脚本生成一个简短有力的中文标题（不超过15字，不加引号不加标点，只输出标题文字）：\n灵感：${inspiration || '无'}\n内容：${context || '无'}`,
         },
       });
       if (error) throw new Error(error.message);
