@@ -25,7 +25,7 @@ serve(async (req) => {
       });
     }
 
-    const moodHint = mood ? `情绪风格：${mood}。` : '';
+    const moodHint = mood ? `情绪风格：${mood}。请深度融合该情绪风格到每个分镜的视觉描述、台词节奏、音效设计和导演手记中。` : '';
 
     let systemPrompt: string;
     let userPrompt: string;
@@ -66,7 +66,8 @@ serve(async (req) => {
         "dialogue": "",
         "audio": "环境音描述",
         "character": "",
-        "directorNote": "导演手记"
+        "directorNote": "导演手记",
+        "emotionIntensity": 30
       }
     ],
     "act1-s2": [...],
@@ -82,7 +83,10 @@ serve(async (req) => {
 - 幕节点不需要在sceneShotsMap中
 - shotType可选：大远景/远景/全景/中景/近景/特写/大特写
 - visual不超过50字，要有画面感
-- directorNote为拍摄建议和情绪提示`;
+- directorNote为拍摄建议和情绪提示
+- emotionIntensity为0-100的整数，代表该分镜的情绪张力（0=平静低沉，50=中性过渡，100=高潮爆发）
+- 情绪曲线应符合戏剧结构：铺垫→渐升→高潮→回落
+${mood ? `- 整体情绪风格为"${mood}"，请将该风格深度融入每个分镜的视觉语言、台词节奏、音效氛围和导演指导中` : ''}`;
 
       userPrompt = `灵感：${inspiration}
 ${moodHint}
@@ -98,11 +102,14 @@ ${moodHint}
 - dialogue: 台词或旁白（可为空字符串）
 - audio: 听觉营造（环境音、音乐提示）
 - character: 角色侧写（可为空字符串）
-- directorNote: 导演手记（拍摄建议、情绪提示）`;
+- directorNote: 导演手记（拍摄建议、情绪提示）
+- emotionIntensity: 0-100的整数，代表该分镜的情绪张力（0=平静，50=中性，100=高潮）
+${mood ? `\n整体情绪风格为"${mood}"，请将该风格深度融入每个分镜的视觉语言、台词节奏、音效氛围和导演指导中。` : ''}`;
 
       userPrompt = `灵感：${inspiration}
 ${moodHint}
 请生成 4-6 个分镜，时长类型：轻巧短片（总计60秒以内）。
+情绪曲线应有起伏，符合叙事节奏。
 直接输出 JSON 数组，不要包含任何其他内容。`;
     }
 
