@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Sparkles, Square, Pencil, Paperclip, Image, Camera, Mic, MicOff } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { toast } from 'sonner';
+import { CameraCapture } from './CameraCapture';
 
 const MOODS = [
   { id: 'healing', label: '治愈', emoji: '🌿' },
@@ -26,13 +27,12 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
   const [mood, setMood] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isListening, setIsListening] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Accessibility: high-contrast mode
   const [highContrast, setHighContrast] = useState(false);
 
   const handleGenerate = () => {
@@ -46,7 +46,6 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
     onCancel?.();
   };
 
-  // File attachments
   const handleFileSelect = (files: FileList | null) => {
     if (!files) return;
     const newFiles = Array.from(files).slice(0, 5);
@@ -58,7 +57,16 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Voice input (Web Speech API)
+  const handleCameraCapture = (file: File) => {
+    setAttachments(prev => [...prev, file].slice(0, 5));
+    toast.success('已拍摄照片作为参考素材');
+  };
+
+  const handleCameraClick = () => {
+    playClick();
+    setShowCamera(true);
+  };
+
   const toggleVoiceInput = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       toast.error('您的浏览器不支持语音输入，请使用 Chrome 或 Edge');
@@ -104,7 +112,6 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
     playClick();
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => { recognitionRef.current?.stop(); };
   }, []);
@@ -133,7 +140,6 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
         <div className="flex items-center gap-1">
           <input ref={fileInputRef} type="file" multiple accept="*/*" className="hidden" onChange={(e) => handleFileSelect(e.target.files)} />
           <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFileSelect(e.target.files)} />
-          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileSelect(e.target.files)} />
 
           <button
             onClick={() => { playClick(); fileInputRef.current?.click(); }}
@@ -158,7 +164,7 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
           </button>
 
           <button
-            onClick={() => { playClick(); cameraInputRef.current?.click(); }}
+            onClick={handleCameraClick}
             disabled={isGenerating}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground/60 hover:text-foreground hover:bg-secondary/50 transition-all duration-300 disabled:opacity-40"
             title="使用相机拍摄"
@@ -206,7 +212,11 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary/60 text-xs text-foreground/70 border border-border/50"
                 role="listitem"
               >
-                <Paperclip size={10} strokeWidth={1.5} />
+                {file.type.startsWith('image/') ? (
+                  <img src={URL.createObjectURL(file)} alt="" className="w-4 h-4 rounded object-cover" />
+                ) : (
+                  <Paperclip size={10} strokeWidth={1.5} />
+                )}
                 <span className="max-w-[120px] truncate">{file.name}</span>
                 <button
                   onClick={() => removeAttachment(i)}
@@ -246,7 +256,6 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
 
         {/* Controls row */}
         <div className="flex items-center justify-between gap-4">
-          {/* Duration capsule toggle */}
           <div className="capsule-toggle" role="radiogroup" aria-label="视频时长选择">
             <button
               onClick={() => { setDuration('short'); playClick(); }}
@@ -268,7 +277,6 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
             </button>
           </div>
 
-          {/* Generate / Cancel buttons */}
           <div className="flex items-center gap-2">
             {isGenerating ? (
               <>
@@ -313,7 +321,7 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
           </div>
         </div>
 
-        {/* Subtle accessibility toggle - naturally placed */}
+        {/* Accessibility toggle */}
         <div className="flex justify-end">
           <button
             onClick={() => { setHighContrast(!highContrast); playClick(); }}
@@ -325,6 +333,13 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
           </button>
         </div>
       </div>
+
+      {/* Camera capture modal */}
+      <CameraCapture
+        visible={showCamera}
+        onCapture={handleCameraCapture}
+        onClose={() => setShowCamera(false)}
+      />
     </div>
   );
 }

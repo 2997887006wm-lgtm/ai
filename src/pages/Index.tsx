@@ -28,7 +28,6 @@ const MOCK_SHORT_SHOTS: Shot[] = [
   { id: 4, shotNumber: '04', shotType: '远景', visual: '行者的背影渐行渐远，阳光从云层缝隙倾泻而下', duration: '6s', dialogue: '', audio: '弦乐缓缓渐入，如叹息般温柔', character: '', directorNote: '自然光是最好的演员。等待真实的丁达尔光线', emotionIntensity: 55 },
 ];
 
-/** Renumber tree labels after reorder */
 function renumberTree(node: TreeNode): TreeNode {
   if (!node.children) return node;
   const children = node.children.map((child, i) => {
@@ -36,11 +35,8 @@ function renumberTree(node: TreeNode): TreeNode {
     let newLabel = child.label;
     const actMatch = child.label.match(/^第.+?幕\s*·?\s*(.*)/);
     const sceneMatch = child.label.match(/^场景.+?\s*·?\s*(.*)/);
-    if (actMatch) {
-      newLabel = `第${num}幕 · ${actMatch[1]}`;
-    } else if (sceneMatch) {
-      newLabel = `场景${num} · ${sceneMatch[1]}`;
-    }
+    if (actMatch) newLabel = `第${num}幕 · ${actMatch[1]}`;
+    else if (sceneMatch) newLabel = `场景${num} · ${sceneMatch[1]}`;
     return renumberTree({ ...child, label: newLabel });
   });
   return { ...node, children };
@@ -73,24 +69,88 @@ const Index = () => {
   const [scriptTree, setScriptTree] = useState<TreeNode>({ id: 'root', label: '总纲', children: [] });
   const [sceneShotsMap, setSceneShotsMap] = useState<Record<string, Shot[]>>({});
   const [videoJobs, setVideoJobs] = useState<VideoJobTracker[]>([]);
+  const [currentScriptId, setCurrentScriptId] = useState<string | null>(null);
+  const [inspiration, setInspiration] = useState('');
+  const [currentMood, setCurrentMood] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const pollRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
-  // For long-form mode: sync shots from sceneShotsMap when activeTreeNode changes
+  // Sync shots from sceneShotsMap when activeTreeNode changes (smooth transition)
   useEffect(() => {
     if (durationType === 'long' && activeTreeNode && sceneShotsMap[activeTreeNode]) {
       setShots(sceneShotsMap[activeTreeNode]);
     }
   }, [activeTreeNode, durationType, sceneShotsMap]);
 
-  // For long-form: persist shot edits back to sceneShotsMap
   const syncShotsToMap = useCallback((updatedShots: Shot[]) => {
     if (durationType === 'long' && activeTreeNode) {
       setSceneShotsMap(prev => ({ ...prev, [activeTreeNode]: updatedShots }));
     }
   }, [durationType, activeTreeNode]);
 
-  // Cancel generation
+  // Auto-save script to DB
+  const saveScript = useCallback(async (
+    id: string | null,
+    data: {
+      title: string;
+      inspiration: string;
+      mood: string;
+      durationType: string;
+      shots: Shot[];
+      scriptTree: TreeNode;
+      sceneShotsMap: Record<string, Shot[]>;
+    }
+  ) => {
+    try {
+      const row = {
+        title: data.title,
+        inspiration: data.inspiration,
+        mood: data.mood,
+        duration_type: data.durationType,
+        shots: JSON.parse(JSON.stringify(data.shots)),
+        script_tree: data.durationType === 'long' ? JSON.parse(JSON.stringify(data.scriptTree)) : null,
+        scene_shots_map: data.durationType === 'long' ? JSON.parse(JSON.stringify(data.sceneShotsMap)) : null,
+        user_id: user?.id || null,
+      };
+
+      if (id) {
+        await supabase.from('scripts').update(row).eq('id', id);
+        return id;
+      } else {
+        const { data: inserted } = await supabase.from('scripts').insert(row).select('id').single();
+        return inserted?.id || null;
+      }
+    } catch (e) {
+      console.error('Save script error:', e);
+      return id;
+    }
+  }, [user]);
+
+  // Auto-save debounce
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      if (phase !== 'storyboard') return;
+      const allShots = durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots;
+      const title = allShots[0]?.visual?.slice(0, 30) || '未命名脚本';
+      const newId = await saveScript(currentScriptId, {
+        title,
+        inspiration,
+        mood: currentMood,
+        durationType,
+        shots: durationType === 'short' ? shots : [],
+        scriptTree,
+        sceneShotsMap,
+      });
+      if (newId && !currentScriptId) setCurrentScriptId(newId);
+    }, 3000);
+  }, [phase, durationType, shots, sceneShotsMap, scriptTree, currentScriptId, inspiration, currentMood, saveScript]);
+
+  useEffect(() => {
+    if (phase === 'storyboard') autoSave();
+  }, [shots, sceneShotsMap, phase, autoSave]);
+
   const handleCancelGenerate = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -100,21 +160,61 @@ const Index = () => {
     toast.info('已停止生成，您可以修改指令后重新生成');
   }, []);
 
-  const handleGenerate = useCallback(async (inspiration: string, duration: 'short' | 'long', mood: string) => {
+  // Auto-generate dialogue suggestions for shots
+  const generateDialogueSuggestions = useCallback(async (parsedShots: Shot[]) => {
+    // Generate dialogue for shots that don't have dialogue but have visuals
+    const shotsNeedingDialogue = parsedShots.filter(s => !s.dialogue && s.visual);
+    if (shotsNeedingDialogue.length === 0) return;
+
+    // Generate in parallel (max 3 at a time)
+    const batch = shotsNeedingDialogue.slice(0, 3);
+    const promises = batch.map(async (shot) => {
+      try {
+        const { data } = await supabase.functions.invoke('generate-dialogue', {
+          body: {
+            visual: shot.visual,
+            shotType: shot.shotType,
+            character: shot.character,
+            duration: shot.duration,
+            mode: shot.character ? 'dialogue' : 'narration',
+          },
+        });
+        if (data?.text) {
+          return { id: shot.id, dialogue: data.text };
+        }
+      } catch { /* ignore */ }
+      return null;
+    });
+
+    const results = await Promise.all(promises);
+    const updates = results.filter(Boolean) as { id: number; dialogue: string }[];
+
+    if (updates.length > 0) {
+      setShots(prev => prev.map(s => {
+        const update = updates.find(u => u.id === s.id);
+        // Only set as suggestion, user can accept/modify
+        return update ? { ...s, dialogueSuggestion: update.dialogue } : s;
+      }));
+      toast.info(`已为 ${updates.length} 个分镜生成台词建议`);
+    }
+  }, []);
+
+  const handleGenerate = useCallback(async (insp: string, duration: 'short' | 'long', mood: string) => {
     setDurationType(duration);
     setIsGenerating(true);
-    
+    setInspiration(insp);
+    setCurrentMood(mood);
+    setCurrentScriptId(null);
+
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-script', {
-        body: { inspiration, duration, mood },
+        body: { inspiration: insp, duration, mood },
       });
-      
-      // Check if aborted
+
       if (controller.signal.aborted) return;
-      
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
@@ -141,6 +241,8 @@ const Index = () => {
           setActiveTreeNode(firstLeaf);
           if (firstLeaf && parsedMap[firstLeaf]) {
             setShots(parsedMap[firstLeaf]);
+            // Auto-generate dialogue for first scene
+            generateDialogueSuggestions(parsedMap[firstLeaf]);
           }
         }
       } else {
@@ -158,6 +260,8 @@ const Index = () => {
             emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
           }));
           setShots(parsed);
+          // Auto-generate dialogue suggestions
+          generateDialogueSuggestions(parsed);
         }
       }
       setPhase('style');
@@ -166,19 +270,17 @@ const Index = () => {
       console.error('Script generation error:', e);
       toast.error(e.message || '脚本生成失败，请重试');
     } finally {
-      if (!controller.signal.aborted) {
-        setIsGenerating(false);
-      }
+      if (!controller.signal.aborted) setIsGenerating(false);
       abortRef.current = null;
     }
-  }, []);
+  }, [generateDialogueSuggestions]);
 
   const handleStyleSelect = useCallback((_styleId: string) => {
     setPhase('storyboard');
   }, []);
 
   const handleUpdateShot = useCallback((id: number, field: keyof Shot, value: string) => {
-    setShots((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+    setShots(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
     if (durationType === 'long' && activeTreeNode) {
       setSceneShotsMap(prev => {
         const current = prev[activeTreeNode] || [];
@@ -188,9 +290,9 @@ const Index = () => {
   }, [durationType, activeTreeNode]);
 
   const handleReorderShots = useCallback((activeId: number, overId: number) => {
-    setShots((prev) => {
-      const oldIndex = prev.findIndex((s) => s.id === activeId);
-      const newIndex = prev.findIndex((s) => s.id === overId);
+    setShots(prev => {
+      const oldIndex = prev.findIndex(s => s.id === activeId);
+      const newIndex = prev.findIndex(s => s.id === overId);
       if (oldIndex === -1 || newIndex === -1) return prev;
       const next = [...prev];
       const [moved] = next.splice(oldIndex, 1);
@@ -200,15 +302,15 @@ const Index = () => {
   }, []);
 
   const handleDeleteShot = useCallback((id: number) => {
-    setShots((prev) => {
-      const next = prev.filter((s) => s.id !== id);
+    setShots(prev => {
+      const next = prev.filter(s => s.id !== id);
       return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
     });
   }, []);
 
   const handleInsertShot = useCallback((afterId: number) => {
-    setShots((prev) => {
-      const idx = prev.findIndex((s) => s.id === afterId);
+    setShots(prev => {
+      const idx = prev.findIndex(s => s.id === afterId);
       if (idx === -1) return prev;
       const newShot: Shot = {
         id: nextShotId++, shotNumber: '', shotType: '中景', visual: '',
@@ -221,7 +323,7 @@ const Index = () => {
   }, []);
 
   const handleAddShot = useCallback(() => {
-    setShots((prev) => {
+    setShots(prev => {
       const newShot: Shot = {
         id: nextShotId++, shotNumber: String(prev.length + 1).padStart(2, '0'),
         shotType: '中景', visual: '', duration: '5s', dialogue: '', audio: '',
@@ -232,14 +334,14 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    if (durationType === 'long' && activeTreeNode) {
-      syncShotsToMap(shots);
-    }
+    if (durationType === 'long' && activeTreeNode) syncShotsToMap(shots);
   }, [shots, durationType, activeTreeNode, syncShotsToMap]);
 
   const handleTreeNodeSelect = useCallback((id: string) => {
     const leaves = getLeafIds(scriptTree);
-    if (leaves.includes(id)) setActiveTreeNode(id);
+    if (leaves.includes(id)) {
+      setActiveTreeNode(id);
+    }
   }, [scriptTree]);
 
   const handleTreeReorder = useCallback((parentId: string, activeId: string, overId: string) => {
@@ -260,7 +362,61 @@ const Index = () => {
     setScriptTree(prev => renumberTree(reorderChildren(prev)));
   }, []);
 
-  // Video generation with DB tracking
+  // Load script from history
+  const handleLoadScript = useCallback(async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('scripts')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      if (!data) return;
+
+      setCurrentScriptId(id);
+      setInspiration(data.inspiration || '');
+      setCurrentMood(data.mood || '');
+      setDurationType(data.duration_type as 'short' | 'long');
+
+      if (data.duration_type === 'long' && data.script_tree && data.scene_shots_map) {
+        const tree = data.script_tree as unknown as TreeNode;
+        const map = data.scene_shots_map as unknown as Record<string, Shot[]>;
+        // Re-assign IDs to avoid conflicts
+        const parsedMap: Record<string, Shot[]> = {};
+        for (const [sceneId, rawShots] of Object.entries(map)) {
+          parsedMap[sceneId] = (rawShots as any[]).map((s: any, i: number) => ({
+            ...s,
+            id: nextShotId++,
+            shotNumber: String(i + 1).padStart(2, '0'),
+          }));
+        }
+        setScriptTree(tree);
+        setSceneShotsMap(parsedMap);
+        const firstLeaf = getFirstLeafId(tree);
+        setActiveTreeNode(firstLeaf);
+        if (firstLeaf && parsedMap[firstLeaf]) setShots(parsedMap[firstLeaf]);
+      } else {
+        const rawShots = (data.shots as any[]) || [];
+        setShots(rawShots.map((s: any, i: number) => ({
+          ...s,
+          id: nextShotId++,
+          shotNumber: String(i + 1).padStart(2, '0'),
+        })));
+        setScriptTree({ id: 'root', label: '总纲', children: [] });
+        setSceneShotsMap({});
+        setActiveTreeNode(null);
+      }
+
+      setPhase('storyboard');
+      setActiveTab('new');
+      toast.success('脚本已加载');
+    } catch (e) {
+      console.error('Load script error:', e);
+      toast.error('加载脚本失败');
+    }
+  }, []);
+
+  // Video generation
   const handleGenerateVideo = useCallback(async () => {
     const processingJobs = videoJobs.filter(j => j.status === 'processing');
     if (processingJobs.length >= 3) {
@@ -283,7 +439,6 @@ const Index = () => {
       const taskId = data?.taskId;
       if (!taskId) throw new Error('未获取到视频任务ID');
 
-      // Save to DB
       const dbRow = {
         task_id: taskId,
         prompt: prompt.slice(0, 2000),
@@ -294,49 +449,32 @@ const Index = () => {
       const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
       const jobDbId = inserted?.id || taskId;
 
-      // Add to local tracker
-      const job: VideoJobTracker = {
-        id: jobDbId,
-        taskId,
-        prompt,
-        status: 'processing',
-        startedAt: Date.now(),
-      };
+      const job: VideoJobTracker = { id: jobDbId, taskId, prompt, status: 'processing', startedAt: Date.now() };
       setVideoJobs(prev => [job, ...prev]);
       toast.info('视频生成任务已提交，预计需要2-5分钟');
       setCredits(c => Math.max(0, c - 5));
 
-      // Poll
       pollRefs.current[jobDbId] = setInterval(async () => {
         try {
           const { data: pollData } = await supabase.functions.invoke('generate-video', {
             body: { action: 'poll', taskId },
           });
-
           if (pollData?.status === 'SUCCESS' && pollData?.videoUrl) {
             clearInterval(pollRefs.current[jobDbId]);
             delete pollRefs.current[jobDbId];
-            // Update DB
             await supabase.from('video_jobs').update({
-              status: 'success',
-              video_url: pollData.videoUrl,
-              thumbnail_url: pollData.coverUrl || null,
+              status: 'success', video_url: pollData.videoUrl, thumbnail_url: pollData.coverUrl || null,
             }).eq('id', jobDbId);
-            // Update local
-            setVideoJobs(prev => prev.map(j =>
-              j.id === jobDbId ? { ...j, status: 'success', videoUrl: pollData.videoUrl } : j
-            ));
+            setVideoJobs(prev => prev.map(j => j.id === jobDbId ? { ...j, status: 'success', videoUrl: pollData.videoUrl } : j));
             toast.success('视频生成完成！');
           } else if (pollData?.status === 'FAIL') {
             clearInterval(pollRefs.current[jobDbId]);
             delete pollRefs.current[jobDbId];
             await supabase.from('video_jobs').update({ status: 'failed' }).eq('id', jobDbId);
-            setVideoJobs(prev => prev.map(j =>
-              j.id === jobDbId ? { ...j, status: 'failed' } : j
-            ));
+            setVideoJobs(prev => prev.map(j => j.id === jobDbId ? { ...j, status: 'failed' } : j));
             toast.error('视频生成失败');
           }
-        } catch { /* ignore transient */ }
+        } catch { /* ignore */ }
       }, 10000);
     } catch (e: any) {
       console.error('Video generation error:', e);
@@ -344,14 +482,10 @@ const Index = () => {
     }
   }, [shots, sceneShotsMap, durationType, videoJobs, user]);
 
-  // Cleanup polls on unmount
   useEffect(() => {
-    return () => {
-      Object.values(pollRefs.current).forEach(clearInterval);
-    };
+    return () => { Object.values(pollRefs.current).forEach(clearInterval); };
   }, []);
 
-  // Re-render timer for progress panel
   const [, setTick] = useState(0);
   useEffect(() => {
     const hasProcessing = videoJobs.some(j => j.status === 'processing');
@@ -371,6 +505,7 @@ const Index = () => {
     setScriptTree({ id: 'root', label: '总纲', children: [] });
     setSceneShotsMap({});
     setActiveTreeNode(null);
+    setCurrentScriptId(null);
   };
 
   const allShotsForPreview = durationType === 'long'
@@ -391,7 +526,7 @@ const Index = () => {
       <main className="flex-1 min-h-screen bg-background overflow-y-auto">
         {activeTab === 'history' ? (
           <div className="px-12 py-16">
-            <HistoryPanel />
+            <HistoryPanel onLoadScript={handleLoadScript} />
           </div>
         ) : activeTab === 'videos' ? (
           <div className="px-12 py-16">
@@ -426,7 +561,7 @@ const Index = () => {
                     onReorder={handleTreeReorder}
                   />
                 </div>
-                <div className="flex-1 animate-slide-in-right">
+                <div className="flex-1 animate-slide-in-right" key={activeTreeNode}>
                   <StoryboardPanel
                     shots={shots}
                     onUpdateShot={handleUpdateShot}
@@ -470,7 +605,6 @@ const Index = () => {
         )}
       </main>
 
-      {/* Video progress tracker */}
       <VideoProgressPanel jobs={videoJobs} onDismiss={handleDismissJob} />
 
       <StyleDrawer
@@ -494,6 +628,9 @@ const Index = () => {
         visible={showPreview}
         shots={allShotsForPreview}
         onClose={() => setShowPreview(false)}
+        scriptTree={scriptTree}
+        sceneShotsMap={sceneShotsMap}
+        durationType={durationType}
       />
     </div>
   );
