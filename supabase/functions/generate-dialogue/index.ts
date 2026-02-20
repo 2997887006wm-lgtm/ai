@@ -12,9 +12,9 @@ serve(async (req) => {
 
   try {
     const { visual, shotType, character, duration, mode = 'dialogue' } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), {
+    const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
+    if (!ZHIPU_API_KEY) {
+      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -36,14 +36,14 @@ serve(async (req) => {
 
 请生成${mode === 'narration' ? '旁白口播' : '角色台词'}。`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${ZHIPU_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'glm-4-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -57,13 +57,8 @@ serve(async (req) => {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'AI额度不足' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
       const t = await response.text();
-      console.error('AI gateway error:', response.status, t);
+      console.error('Zhipu API error:', response.status, t);
       return new Response(JSON.stringify({ error: 'AI生成失败' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
