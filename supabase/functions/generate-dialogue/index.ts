@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { visual, shotType, character, duration, mode = 'dialogue' } = await req.json();
+    const { visual, shotType, character, duration, mode = 'dialogue', customPrompt } = await req.json();
     const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
     if (!ZHIPU_API_KEY) {
       return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
@@ -25,16 +25,24 @@ serve(async (req) => {
       });
     }
 
-    const systemPrompt = mode === 'narration'
-      ? '你是一位专业的视频旁白撰稿人。根据画面描述撰写简洁、富有诗意的旁白口播文案。语言风格：克制、优雅、有呼吸感。只输出旁白文案本身，不要任何解释或标注。'
-      : '你是一位专业的影视编剧。根据画面描述和角色信息，撰写符合情景的对白台词。台词需自然流畅、符合角色性格。只输出台词本身，不要任何解释或标注。';
+    let systemPrompt: string;
+    let userPrompt: string;
 
-    const userPrompt = `画面描述：${visual}
+    if (customPrompt) {
+      systemPrompt = '你是一位专业的影视创意总监。请严格按照用户要求输出，不要添加任何额外内容、标点或格式。';
+      userPrompt = customPrompt;
+    } else {
+      systemPrompt = mode === 'narration'
+        ? '你是一位专业的视频旁白撰稿人。根据画面描述撰写简洁、富有诗意的旁白口播文案。语言风格：克制、优雅、有呼吸感。只输出旁白文案本身，不要任何解释或标注。'
+        : '你是一位专业的影视编剧。根据画面描述和角色信息，撰写符合情景的对白台词。台词需自然流畅、符合角色性格。只输出台词本身，不要任何解释或标注。';
+
+      userPrompt = `画面描述：${visual}
 景别：${shotType || '中景'}
 角色：${character || '未指定'}
 预估时长：${duration || '5s'}
 
 请生成${mode === 'narration' ? '旁白口播' : '角色台词'}。`;
+    }
 
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
