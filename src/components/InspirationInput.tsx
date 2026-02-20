@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Square, Pencil } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 
 const MOODS = [
@@ -15,10 +15,11 @@ const MOODS = [
 
 interface InspirationInputProps {
   onGenerate: (inspiration: string, duration: 'short' | 'long', mood: string) => void;
+  onCancel?: () => void;
   isGenerating: boolean;
 }
 
-export function InspirationInput({ onGenerate, isGenerating }: InspirationInputProps) {
+export function InspirationInput({ onGenerate, onCancel, isGenerating }: InspirationInputProps) {
   const [inspiration, setInspiration] = useState('');
   const [duration, setDuration] = useState<'short' | 'long'>('short');
   const [mood, setMood] = useState('');
@@ -27,6 +28,11 @@ export function InspirationInput({ onGenerate, isGenerating }: InspirationInputP
     if (!inspiration.trim()) return;
     playClick();
     onGenerate(inspiration, duration, mood);
+  };
+
+  const handleCancel = () => {
+    playClick();
+    onCancel?.();
   };
 
   return (
@@ -40,6 +46,7 @@ export function InspirationInput({ onGenerate, isGenerating }: InspirationInputP
             placeholder="在此输入您的核心灵感..."
             className="w-full bg-transparent border-none outline-none resize-none text-lg leading-relaxed placeholder:text-muted-foreground/40 font-serif-cn min-h-[120px] px-1 py-2"
             rows={4}
+            disabled={isGenerating}
           />
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
         </div>
@@ -52,11 +59,12 @@ export function InspirationInput({ onGenerate, isGenerating }: InspirationInputP
               <button
                 key={m.id}
                 onClick={() => { setMood(mood === m.id ? '' : m.id); playClick(); }}
+                disabled={isGenerating}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all duration-300 ${
                   mood === m.id
                     ? 'border-foreground bg-foreground text-background shadow-sm'
                     : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30'
-                }`}
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 <span>{m.emoji}</span>
                 {m.label}
@@ -71,27 +79,63 @@ export function InspirationInput({ onGenerate, isGenerating }: InspirationInputP
           <div className="capsule-toggle">
             <button
               onClick={() => { setDuration('short'); playClick(); }}
+              disabled={isGenerating}
               className={`capsule-option ${duration === 'short' ? 'capsule-option-active' : 'capsule-option-inactive'}`}
             >
               轻巧短片 (&lt;60s)
             </button>
             <button
               onClick={() => { setDuration('long'); playClick(); }}
+              disabled={isGenerating}
               className={`capsule-option ${duration === 'long' ? 'capsule-option-active' : 'capsule-option-inactive'}`}
             >
               深度长片
             </button>
           </div>
 
-          {/* Generate button */}
-          <button
-            onClick={handleGenerate}
-            disabled={!inspiration.trim() || isGenerating}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-foreground text-background text-sm font-medium transition-all duration-300 hover:shadow-elevated disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Sparkles size={14} strokeWidth={1.5} />
-            {isGenerating ? '灵感酝酿中...' : '生成脚本'}
-          </button>
+          {/* Generate / Cancel buttons */}
+          <div className="flex items-center gap-2">
+            {isGenerating ? (
+              <>
+                {/* Generating indicator */}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-xs">灵感酝酿中</span>
+                </div>
+
+                {/* Cancel button */}
+                <button
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-destructive/30 text-destructive text-sm font-medium transition-all duration-300 hover:bg-destructive/10 hover:border-destructive/50"
+                >
+                  <Square size={12} strokeWidth={2} fill="currentColor" />
+                  停止
+                </button>
+
+                {/* Edit button */}
+                <button
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border text-sm text-foreground font-medium transition-all duration-300 hover:bg-secondary"
+                >
+                  <Pencil size={12} strokeWidth={1.5} />
+                  重新编辑
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleGenerate}
+                disabled={!inspiration.trim()}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-foreground text-background text-sm font-medium transition-all duration-300 hover:shadow-elevated disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={14} strokeWidth={1.5} />
+                生成脚本
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
