@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.generate-shot-image]
 verify_jwt = false
+
+[functions.generate-script]
+verify_jwt = false

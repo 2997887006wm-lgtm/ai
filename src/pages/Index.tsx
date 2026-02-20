@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import { AppSidebar } from '@/components/AppSidebar';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { InspirationInput } from '@/components/InspirationInput';
 import { StyleDrawer } from '@/components/StyleDrawer';
 import { StoryboardPanel } from '@/components/StoryboardPanel';
@@ -74,13 +76,36 @@ const Index = () => {
   const [activeTreeNode, setActiveTreeNode] = useState<string | null>('act1-s1');
   const [scriptTree, setScriptTree] = useState<TreeNode>(MOCK_TREE);
 
-  const handleGenerate = useCallback((_inspiration: string, duration: 'short' | 'long', _mood: string) => {
+  const handleGenerate = useCallback(async (inspiration: string, duration: 'short' | 'long', mood: string) => {
     setDurationType(duration);
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-script', {
+        body: { inspiration, duration, mood },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.shots && Array.isArray(data.shots)) {
+        const parsed: Shot[] = data.shots.map((s: any, i: number) => ({
+          id: nextShotId++,
+          shotNumber: String(i + 1).padStart(2, '0'),
+          shotType: s.shotType || '中景',
+          visual: s.visual || '',
+          duration: s.duration || '5s',
+          dialogue: s.dialogue || '',
+          audio: s.audio || '',
+          character: s.character || '',
+          directorNote: s.directorNote || '',
+        }));
+        setShots(parsed);
+      }
       setPhase('style');
-    }, 1200);
+    } catch (e: any) {
+      console.error('Script generation error:', e);
+      toast.error(e.message || '脚本生成失败，请重试');
+    } finally {
+      setIsGenerating(false);
+    }
   }, []);
 
   const handleStyleSelect = useCallback((_styleId: string) => {
