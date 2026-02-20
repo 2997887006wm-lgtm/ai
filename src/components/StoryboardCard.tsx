@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Trash2, Plus } from 'lucide-react';
+import { GripVertical, Trash2, Plus, ImagePlus, MessageSquarePlus, Mic, Loader2 } from 'lucide-react';
 import { playClick } from '@/utils/audio';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Shot {
   id: number;
@@ -13,6 +15,7 @@ interface Shot {
   audio: string;
   character: string;
   directorNote: string;
+  imageUrl?: string;
 }
 
 interface StoryboardCardProps {
@@ -53,6 +56,10 @@ function InlineField({ label, value, onChange, multiline = false }: {
 }
 
 export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter }: StoryboardCardProps) {
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingDialogue, setIsGeneratingDialogue] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(shot.imageUrl || null);
+
   const {
     attributes,
     listeners,
@@ -69,6 +76,52 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
     animationFillMode: 'both' as const,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : undefined,
+  };
+
+  const handleGenerateImage = async () => {
+    if (!shot.visual.trim()) return;
+    playClick();
+    setIsGeneratingImage(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-shot-image', {
+        body: { visual: shot.visual, shotType: shot.shotType },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.imageUrl) {
+        setGeneratedImage(data.imageUrl);
+      }
+    } catch (e: any) {
+      console.error('Image generation error:', e);
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  const handleGenerateDialogue = async (mode: 'dialogue' | 'narration') => {
+    if (!shot.visual.trim()) return;
+    playClick();
+    setIsGeneratingDialogue(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-dialogue', {
+        body: {
+          visual: shot.visual,
+          shotType: shot.shotType,
+          character: shot.character,
+          duration: shot.duration,
+          mode,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.text) {
+        onUpdate(shot.id, 'dialogue', data.text);
+      }
+    } catch (e: any) {
+      console.error('Dialogue generation error:', e);
+    } finally {
+      setIsGeneratingDialogue(false);
+    }
   };
 
   return (
@@ -109,21 +162,66 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
           </button>
         </div>
 
-        {/* Visual */}
-        <InlineField
-          label="视觉画面"
-          value={shot.visual}
-          onChange={(v) => onUpdate(shot.id, 'visual', v)}
-          multiline
-        />
+        {/* Generated image */}
+        {generatedImage && (
+          <div className="mb-4 rounded-lg overflow-hidden border border-border">
+            <img
+              src={generatedImage}
+              alt={shot.visual}
+              className="w-full h-40 object-cover"
+            />
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        {/* Visual + AI image button */}
+        <div className="relative">
           <InlineField
-            label="台词"
-            value={shot.dialogue}
-            onChange={(v) => onUpdate(shot.id, 'dialogue', v)}
+            label="视觉画面"
+            value={shot.visual}
+            onChange={(v) => onUpdate(shot.id, 'visual', v)}
             multiline
           />
+          <button
+            onClick={handleGenerateImage}
+            disabled={isGeneratingImage || !shot.visual.trim()}
+            className="absolute top-0 right-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-scarlet hover:bg-scarlet/5 transition-all duration-300 disabled:opacity-30"
+            title="AI 生成参考配图"
+          >
+            {isGeneratingImage ? <Loader2 size={10} className="animate-spin" /> : <ImagePlus size={10} strokeWidth={2} />}
+            AI配图
+          </button>
+        </div>
+
+        {/* Dialogue + AI generate buttons */}
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="relative">
+            <InlineField
+              label="台词"
+              value={shot.dialogue}
+              onChange={(v) => onUpdate(shot.id, 'dialogue', v)}
+              multiline
+            />
+            <div className="absolute top-0 right-0 flex gap-1">
+              <button
+                onClick={() => handleGenerateDialogue('dialogue')}
+                disabled={isGeneratingDialogue || !shot.visual.trim()}
+                className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-all duration-300 disabled:opacity-30"
+                title="AI 生成台词"
+              >
+                {isGeneratingDialogue ? <Loader2 size={9} className="animate-spin" /> : <MessageSquarePlus size={9} strokeWidth={2} />}
+                台词
+              </button>
+              <button
+                onClick={() => handleGenerateDialogue('narration')}
+                disabled={isGeneratingDialogue || !shot.visual.trim()}
+                className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-all duration-300 disabled:opacity-30"
+                title="AI 生成旁白口播"
+              >
+                <Mic size={9} strokeWidth={2} />
+                口播
+              </button>
+            </div>
+          </div>
           <InlineField
             label="听觉营造"
             value={shot.audio}
