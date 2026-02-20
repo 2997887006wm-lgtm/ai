@@ -37,7 +37,7 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, a
               ? 'bg-charcoal-lighter text-sidebar-accent-foreground'
               : 'text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light'
           }`}
-          title="历史剧本"
+          title="历史脚本"
         >
           <ScrollText size={18} strokeWidth={1.5} />
         </button>

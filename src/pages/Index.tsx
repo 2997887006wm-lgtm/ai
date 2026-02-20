@@ -9,6 +9,7 @@ import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScript
 import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
+import { exportScriptDocument } from '@/utils/exportScript';
 import type { Shot } from '@/components/StoryboardCard';
 
 let nextShotId = 100;
@@ -192,7 +193,7 @@ const Index = () => {
           <div className="px-12 py-16">
             {phase === 'input' && (
               <div className="max-w-3xl mx-auto mb-16 animate-fade-in">
-                <h1 className="text-2xl font-serif-cn font-medium text-foreground mb-2">剧本工作台</h1>
+                <h1 className="text-2xl font-serif-cn font-medium text-foreground mb-2">脚本工作台</h1>
                 <p className="text-sm text-muted-foreground">从一粒灵感的种子，生长为完整的视觉叙事</p>
               </div>
             )}
@@ -220,7 +221,7 @@ const Index = () => {
                     onInsertShot={handleInsertShot}
                     onAddShot={handleAddShot}
                     credits={credits}
-                    onExport={() => {}}
+                    onExport={() => exportScriptDocument(shots)}
                     onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
                   />
                 </div>
@@ -236,7 +237,7 @@ const Index = () => {
                 onInsertShot={handleInsertShot}
                 onAddShot={handleAddShot}
                 credits={credits}
-                onExport={() => {}}
+                onExport={() => exportScriptDocument(shots)}
                 onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
               />
             )}

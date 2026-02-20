@@ -9,7 +9,7 @@ const HISTORY_ITEMS = [
 export function HistoryPanel() {
   return (
     <div className="w-full max-w-3xl mx-auto animate-fade-in">
-      <h2 className="text-lg font-serif-cn text-foreground mb-6">历史剧本</h2>
+      <h2 className="text-lg font-serif-cn text-foreground mb-6">历史脚本</h2>
       <div className="flex flex-col gap-3">
         {HISTORY_ITEMS.map((item) => (
           <button
