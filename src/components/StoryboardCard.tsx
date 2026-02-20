@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 interface Shot {
   id: number;
@@ -48,13 +51,40 @@ function InlineField({ label, value, onChange, multiline = false }: {
 }
 
 export function StoryboardCard({ shot, index, onUpdate }: StoryboardCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: shot.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    animationDelay: `${index * 100}ms`,
+    animationFillMode: 'both' as const,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className="rounded-xl border border-border bg-card p-6 shadow-soft hover:shadow-card transition-all duration-500 animate-fade-in-up"
-      style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
     >
       {/* Header row */}
       <div className="flex items-center gap-4 mb-5">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors touch-none"
+          aria-label="拖拽排序"
+        >
+          <GripVertical size={16} strokeWidth={1.5} />
+        </button>
         <span className="text-xs font-mono text-muted-foreground/40 w-8">#{shot.shotNumber}</span>
         <InlineField
           label="景别"

@@ -62,6 +62,18 @@ const Index = () => {
     setShots((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
   }, []);
 
+  const handleReorderShots = useCallback((activeId: number, overId: number) => {
+    setShots((prev) => {
+      const oldIndex = prev.findIndex((s) => s.id === activeId);
+      const newIndex = prev.findIndex((s) => s.id === overId);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(oldIndex, 1);
+      next.splice(newIndex, 0, moved);
+      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+    });
+  }, []);
+
   const handleNewProject = () => {
     setActiveTab('new');
     setPhase('input');
@@ -113,6 +125,7 @@ const Index = () => {
                   <StoryboardPanel
                     shots={shots}
                     onUpdateShot={handleUpdateShot}
+                    onReorderShots={handleReorderShots}
                     credits={credits}
                     onExport={() => {}}
                     onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
@@ -125,6 +138,7 @@ const Index = () => {
               <StoryboardPanel
                 shots={shots}
                 onUpdateShot={handleUpdateShot}
+                onReorderShots={handleReorderShots}
                 credits={credits}
                 onExport={() => {}}
                 onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
