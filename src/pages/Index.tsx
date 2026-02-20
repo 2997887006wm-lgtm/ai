@@ -66,6 +66,7 @@ const Index = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [durationType, setDurationType] = useState<'short' | 'long'>('short');
   const [shots, setShots] = useState<Shot[]>(MOCK_SHORT_SHOTS);
+  const [scriptTitle, setScriptTitle] = useState('');
   const [activeTreeNode, setActiveTreeNode] = useState<string | null>(null);
   const [scriptTree, setScriptTree] = useState<TreeNode>({ id: 'root', label: '总纲', children: [] });
   const [sceneShotsMap, setSceneShotsMap] = useState<Record<string, Shot[]>>({});
@@ -132,7 +133,7 @@ const Index = () => {
     saveTimerRef.current = setTimeout(async () => {
       if (phase !== 'storyboard') return;
       const allShots = durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots;
-      const title = allShots[0]?.visual?.slice(0, 30) || '未命名脚本';
+      const title = scriptTitle || allShots[0]?.visual?.slice(0, 30) || '未命名脚本';
       const newId = await saveScript(currentScriptId, {
         title,
         inspiration,
@@ -373,6 +374,7 @@ const Index = () => {
       if (!data) return;
 
       setCurrentScriptId(id);
+      setScriptTitle(data.title || '');
       setInspiration(data.inspiration || '');
       setCurrentMood(data.mood || '');
       setDurationType(data.duration_type as 'short' | 'long');
@@ -461,6 +463,7 @@ const Index = () => {
     setActiveTab('new');
     setPhase('input');
     setShots(MOCK_SHORT_SHOTS);
+    setScriptTitle('');
     setScriptTree({ id: 'root', label: '总纲', children: [] });
     setSceneShotsMap({});
     setActiveTreeNode(null);
@@ -531,6 +534,9 @@ const Index = () => {
                     credits={credits}
                     onPreview={() => setShowPreview(true)}
                     onGenerateVideo={handleGenerateVideo}
+                    title={scriptTitle}
+                    onTitleChange={setScriptTitle}
+                    inspiration={inspiration}
                   />
                 </div>
               </div>
@@ -547,6 +553,9 @@ const Index = () => {
                 credits={credits}
                 onPreview={() => setShowPreview(true)}
                 onGenerateVideo={handleGenerateVideo}
+                title={scriptTitle}
+                onTitleChange={setScriptTitle}
+                inspiration={inspiration}
               />
             )}
           </div>
