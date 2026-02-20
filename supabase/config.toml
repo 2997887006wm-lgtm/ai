@@ -2,3 +2,12 @@ project_id = "avbdwoetjqhgvmflqena"
 
 [functions.elevenlabs-tts]
 verify_jwt = false
+
+[functions.freesound-search]
+verify_jwt = false
+
+[functions.generate-dialogue]
+verify_jwt = false
+
+[functions.generate-shot-image]
+verify_jwt = false
