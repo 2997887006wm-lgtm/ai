@@ -1,7 +1,7 @@
 import type { Shot } from './StoryboardCard';
 import type { TreeNode } from './DraggableScriptTree';
-import { X, FileDown, FileText, Table, Printer } from 'lucide-react';
-import { exportAsMarkdown, exportAsExcel, exportAsPdf } from '@/utils/exportScript';
+import { X, FileDown, FileText, Table, Printer, FileType } from 'lucide-react';
+import { exportAsMarkdown, exportAsExcel, exportAsPdf, exportAsWord } from '@/utils/exportScript';
 
 interface ScriptPreviewSidebarProps {
   visible: boolean;
@@ -39,6 +39,7 @@ export function ScriptPreviewSidebar({ visible, shots, onClose, scriptTree, scen
           <div className="flex items-center gap-2">
             <ExportButton icon={FileText} label="Markdown" onClick={() => exportAsMarkdown(shots)} />
             <ExportButton icon={Table} label="Excel" onClick={() => exportAsExcel(shots)} />
+            <ExportButton icon={FileType} label="Word" onClick={() => exportAsWord(shots)} />
             <ExportButton icon={Printer} label="PDF" onClick={() => exportAsPdf(shots)} />
             <button onClick={onClose} className="ml-2 p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
               <X size={16} />

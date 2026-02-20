@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.recommend-audio]
 verify_jwt = false
+
+[functions.polish-prompt]
+verify_jwt = false

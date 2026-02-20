@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, Square, Pencil, Paperclip, Image, Camera, Mic, MicOff } from 'lucide-react';
+import { Sparkles, Square, Pencil, Paperclip, Image, Camera, Mic, MicOff, Wand2, Loader2 } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { toast } from 'sonner';
 import { CameraCapture } from './CameraCapture';
-
+import { ScriptTemplates } from './ScriptTemplates';
+import { supabase } from '@/integrations/supabase/client';
 const MOODS = [
   { id: 'healing', label: '治愈', emoji: '🌿' },
   { id: 'funny', label: '搞笑', emoji: '😄' },
@@ -34,6 +35,36 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [highContrast, setHighContrast] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
+
+  const handlePolishPrompt = async () => {
+    if (!inspiration.trim()) return;
+    playClick();
+    setIsPolishing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('polish-prompt', {
+        body: { prompt: inspiration },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.polished) {
+        setInspiration(data.polished);
+        toast.success('提示词已润色');
+      }
+    } catch (e: any) {
+      console.error('Polish error:', e);
+      toast.error('润色失败，请重试');
+    } finally {
+      setIsPolishing(false);
+    }
+  };
+
+  const handleUseTemplate = (templateInspiration: string, templateDuration: 'short' | 'long', templateMood: string) => {
+    setInspiration(templateInspiration);
+    setDuration(templateDuration);
+    setMood(templateMood);
+    toast.success('已加载脚本模版，可编辑后生成');
+  };
 
   const handleGenerate = () => {
     if (!inspiration.trim()) return;
@@ -175,6 +206,18 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
           </button>
 
           <div className="w-px h-4 bg-border mx-1" />
+
+          <ScriptTemplates onUseTemplate={handleUseTemplate} />
+
+          <button
+            onClick={handlePolishPrompt}
+            disabled={isGenerating || isPolishing || !inspiration.trim()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground/60 hover:text-primary hover:bg-primary/5 transition-all duration-300 disabled:opacity-40"
+            title="AI 润色提示词"
+          >
+            {isPolishing ? <Loader2 size={13} strokeWidth={1.5} className="animate-spin" /> : <Wand2 size={13} strokeWidth={1.5} />}
+            <span className="hidden sm:inline">AI润色</span>
+          </button>
 
           <button
             onClick={toggleVoiceInput}
