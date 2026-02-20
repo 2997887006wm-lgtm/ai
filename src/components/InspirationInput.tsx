@@ -139,7 +139,7 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
         {/* Attachment toolbar */}
         <div className="flex items-center gap-1">
           <input ref={fileInputRef} type="file" multiple accept="*/*" className="hidden" onChange={(e) => handleFileSelect(e.target.files)} />
-          <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFileSelect(e.target.files)} />
+          <input ref={imageInputRef} type="file" multiple accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileSelect(e.target.files)} />
 
           <button
             onClick={() => { playClick(); fileInputRef.current?.click(); }}
@@ -156,11 +156,11 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
             onClick={() => { playClick(); imageInputRef.current?.click(); }}
             disabled={isGenerating}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground/60 hover:text-foreground hover:bg-secondary/50 transition-all duration-300 disabled:opacity-40"
-            title="从图库选择图片"
-            aria-label="从图库选择参考图片"
+            title="从图库选择照片"
+            aria-label="从图库选择参考照片"
           >
             <Image size={13} strokeWidth={1.5} />
-            <span className="hidden sm:inline">图库</span>
+            <span className="hidden sm:inline">照片</span>
           </button>
 
           <button

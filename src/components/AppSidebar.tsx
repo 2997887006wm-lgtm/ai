@@ -1,4 +1,4 @@
-import { FilePlus, ScrollText, Droplets, Video, User, LogIn } from 'lucide-react';
+import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -46,8 +46,17 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
         ))}
       </nav>
 
-      {/* Bottom: account + credits */}
+      {/* Bottom: community + account + credits */}
       <div className="flex flex-col items-center gap-4">
+        {/* Community */}
+        <button
+          onClick={() => { playClick(); navigate('/community'); }}
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
+          title="社区广场"
+        >
+          <Users size={18} strokeWidth={1.5} />
+        </button>
+
         {/* Credits */}
         <button
           onClick={() => { playClick(); onCreditsClick(); }}

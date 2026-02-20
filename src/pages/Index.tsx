@@ -11,10 +11,10 @@ import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScript
 import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
-import { VideoProgressPanel, type VideoJobTracker } from '@/components/VideoProgressPanel';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
+import { useVideoPolling } from '@/hooks/useVideoPolling';
 import type { Shot } from '@/components/StoryboardCard';
 
 let nextShotId = 100;
@@ -56,6 +56,7 @@ type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
   const { user } = useAuth();
+  const { videoJobs, addJob } = useVideoPolling();
   const [activeTab, setActiveTab] = useState<'new' | 'history' | 'videos'>('new');
   const [phase, setPhase] = useState<Phase>('input');
   const [credits, setCredits] = useState(15);
@@ -68,12 +69,10 @@ const Index = () => {
   const [activeTreeNode, setActiveTreeNode] = useState<string | null>(null);
   const [scriptTree, setScriptTree] = useState<TreeNode>({ id: 'root', label: '总纲', children: [] });
   const [sceneShotsMap, setSceneShotsMap] = useState<Record<string, Shot[]>>({});
-  const [videoJobs, setVideoJobs] = useState<VideoJobTracker[]>([]);
   const [currentScriptId, setCurrentScriptId] = useState<string | null>(null);
   const [inspiration, setInspiration] = useState('');
   const [currentMood, setCurrentMood] = useState('');
   const abortRef = useRef<AbortController | null>(null);
-  const pollRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Sync shots from sceneShotsMap when activeTreeNode changes (smooth transition)
   useEffect(() => {
@@ -417,7 +416,7 @@ const Index = () => {
   }, []);
 
   // Video generation
-  const handleGenerateVideo = useCallback(async () => {
+  const handleGenerateVideo = useCallback(async (ratio?: string) => {
     const processingJobs = videoJobs.filter(j => j.status === 'processing');
     if (processingJobs.length >= 3) {
       toast.warning('最多同时生成3个视频，请等待完成');
@@ -427,7 +426,7 @@ const Index = () => {
     const allShots = durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots;
     const prompt = allShots.map((s, i) =>
       `镜头${i + 1}(${s.shotType}): ${s.visual}${s.dialogue ? ` 台词：${s.dialogue}` : ''}`
-    ).join('；');
+    ).join('；') + (ratio ? ` [画面比例: ${ratio}]` : '');
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-video', {
@@ -449,54 +448,14 @@ const Index = () => {
       const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
       const jobDbId = inserted?.id || taskId;
 
-      const job: VideoJobTracker = { id: jobDbId, taskId, prompt, status: 'processing', startedAt: Date.now() };
-      setVideoJobs(prev => [job, ...prev]);
+      addJob({ id: jobDbId, taskId, prompt, status: 'processing', startedAt: Date.now() }, taskId);
       toast.info('视频生成任务已提交，预计需要2-5分钟');
       setCredits(c => Math.max(0, c - 5));
-
-      pollRefs.current[jobDbId] = setInterval(async () => {
-        try {
-          const { data: pollData } = await supabase.functions.invoke('generate-video', {
-            body: { action: 'poll', taskId },
-          });
-          if (pollData?.status === 'SUCCESS' && pollData?.videoUrl) {
-            clearInterval(pollRefs.current[jobDbId]);
-            delete pollRefs.current[jobDbId];
-            await supabase.from('video_jobs').update({
-              status: 'success', video_url: pollData.videoUrl, thumbnail_url: pollData.coverUrl || null,
-            }).eq('id', jobDbId);
-            setVideoJobs(prev => prev.map(j => j.id === jobDbId ? { ...j, status: 'success', videoUrl: pollData.videoUrl } : j));
-            toast.success('视频生成完成！');
-          } else if (pollData?.status === 'FAIL') {
-            clearInterval(pollRefs.current[jobDbId]);
-            delete pollRefs.current[jobDbId];
-            await supabase.from('video_jobs').update({ status: 'failed' }).eq('id', jobDbId);
-            setVideoJobs(prev => prev.map(j => j.id === jobDbId ? { ...j, status: 'failed' } : j));
-            toast.error('视频生成失败');
-          }
-        } catch { /* ignore */ }
-      }, 10000);
     } catch (e: any) {
       console.error('Video generation error:', e);
       toast.error(e.message || '视频生成失败');
     }
-  }, [shots, sceneShotsMap, durationType, videoJobs, user]);
-
-  useEffect(() => {
-    return () => { Object.values(pollRefs.current).forEach(clearInterval); };
-  }, []);
-
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const hasProcessing = videoJobs.some(j => j.status === 'processing');
-    if (!hasProcessing) return;
-    const timer = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(timer);
-  }, [videoJobs]);
-
-  const handleDismissJob = useCallback((id: string) => {
-    setVideoJobs(prev => prev.filter(j => j.id !== id));
-  }, []);
+  }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob]);
 
   const handleNewProject = () => {
     setActiveTab('new');
@@ -605,7 +564,7 @@ const Index = () => {
         )}
       </main>
 
-      <VideoProgressPanel jobs={videoJobs} onDismiss={handleDismissJob} />
+      {/* VideoProgressPanel is now rendered globally in App.tsx */}
 
       <StyleDrawer
         visible={phase === 'style'}
