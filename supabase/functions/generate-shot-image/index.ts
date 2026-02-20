@@ -12,9 +12,9 @@ serve(async (req) => {
 
   try {
     const { visual, shotType } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), {
+    const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
+    if (!ZHIPU_API_KEY) {
+      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -25,18 +25,18 @@ serve(async (req) => {
       });
     }
 
-    const prompt = `Generate a cinematic film storyboard reference image. Shot type: ${shotType || 'medium shot'}. Scene description: ${visual}. Style: photorealistic, cinematic lighting, film grain, 16:9 aspect ratio, professional cinematography.`;
+    const prompt = `生成一张电影分镜参考图。景别：${shotType || '中景'}。画面描述：${visual}。风格：写实风格，电影感光影，16:9画幅，专业摄影构图。`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/images/generations', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${ZHIPU_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        messages: [{ role: 'user', content: prompt }],
-        modalities: ['image', 'text'],
+        model: 'cogview-4',
+        prompt,
+        size: '1440x720',
       }),
     });
 
@@ -52,14 +52,14 @@ serve(async (req) => {
         });
       }
       const t = await response.text();
-      console.error('AI gateway error:', response.status, t);
+      console.error('Zhipu API error:', response.status, t);
       return new Response(JSON.stringify({ error: 'AI生成失败' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const imageUrl = data.data?.[0]?.url;
 
     if (!imageUrl) {
       return new Response(JSON.stringify({ error: '未能生成图片' }), {
