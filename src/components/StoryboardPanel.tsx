@@ -1,9 +1,10 @@
 import { useCallback, useState, useMemo } from 'react';
 import { StoryboardCard, type Shot } from './StoryboardCard';
 import { EmotionCurveChart } from './EmotionCurveChart';
-import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock } from 'lucide-react';
+import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock, Music2, Wand2 } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import {
   DndContext,
   closestCenter,
@@ -51,15 +52,17 @@ interface StoryboardPanelProps {
   credits: number;
   onPreview: () => void;
   onGenerateVideo: (ratio?: string) => void;
+  onGenerateVideoPerShot?: (ratio?: string) => void;
   title?: string;
   onTitleChange?: (title: string) => void;
   inspiration?: string;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, title, onTitleChange, inspiration }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateVideoPerShot, title, onTitleChange, inspiration }: StoryboardPanelProps) {
   const [activeDragId, setActiveDragId] = useState<number | null>(null);
   const [selectedRatio, setSelectedRatio] = useState('16:9');
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [isRecommendingAudio, setIsRecommendingAudio] = useState(false);
 
   const totalDuration = useMemo(() => {
     const totalSec = shots.reduce((sum, s) => sum + parseDurationSeconds(s.duration), 0);
@@ -90,6 +93,47 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
       console.error('Title generation error:', e);
     } finally {
       setIsGeneratingTitle(false);
+    }
+  };
+
+  const handleRecommendAudio = async () => {
+    if (shots.length === 0) return;
+    playClick();
+    setIsRecommendingAudio(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('recommend-audio', {
+        body: {
+          shots: shots.map(s => ({
+            id: s.id,
+            visual: s.visual,
+            shotType: s.shotType,
+            audio: s.audio,
+            duration: s.duration,
+            dialogue: s.dialogue,
+          })),
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      if (data?.recommendations && Array.isArray(data.recommendations)) {
+        let applied = 0;
+        for (const rec of data.recommendations) {
+          const shotIndex = rec.shotIndex;
+          if (shotIndex >= 0 && shotIndex < shots.length && rec.audioDescription) {
+            const shot = shots[shotIndex];
+            const audioText = rec.audioDescription + (rec.bgmSuggestion ? ` | BGM: ${rec.bgmSuggestion}` : '');
+            onUpdateShot(shot.id, 'audio', audioText);
+            applied++;
+          }
+        }
+        toast.success(`已为 ${applied} 个分镜推荐音效方案`);
+      }
+    } catch (e: any) {
+      console.error('Audio recommendation error:', e);
+      toast.error('音效推荐失败，请重试');
+    } finally {
+      setIsRecommendingAudio(false);
     }
   };
 
@@ -155,14 +199,25 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
             </span>
           </div>
         </div>
-        <button
-          onClick={() => { playClick(); onAddShot(); }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-300"
-          aria-label="添加新分镜"
-        >
-          <Plus size={12} strokeWidth={2} />
-          添加分镜
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRecommendAudio}
+            disabled={isRecommendingAudio || shots.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-border text-xs text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all duration-300 disabled:opacity-30"
+            title="AI 智能推荐每个分镜的音效方案"
+          >
+            {isRecommendingAudio ? <Loader2 size={12} className="animate-spin" /> : <Music2 size={12} strokeWidth={2} />}
+            AI音效
+          </button>
+          <button
+            onClick={() => { playClick(); onAddShot(); }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-300"
+            aria-label="添加新分镜"
+          >
+            <Plus size={12} strokeWidth={2} />
+            添加分镜
+          </button>
+        </div>
       </div>
 
       {/* Emotion Curve Chart */}
@@ -191,7 +246,6 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
           </div>
         </SortableContext>
 
-        {/* Drag overlay for professional feedback */}
         <DragOverlay dropAnimation={null}>
           {activeDragShot && (
             <div className="rounded-xl border-2 border-primary/20 bg-card/95 p-4 shadow-elevated backdrop-blur-sm opacity-90 pointer-events-none">
@@ -239,13 +293,24 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
             <Eye size={14} strokeWidth={1.5} />
             预览 & 导出
           </button>
+          {onGenerateVideoPerShot && (
+            <button
+              onClick={() => { playClick(); onGenerateVideoPerShot(selectedRatio); }}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-primary/30 text-sm transition-all duration-300 hover:border-primary hover:shadow-sm text-foreground"
+              aria-label="逐镜拆分生成视频"
+            >
+              <Wand2 size={14} strokeWidth={1.5} className="text-primary" />
+              逐镜成片
+              <span className="text-[10px] text-muted-foreground ml-1">({shots.length}镜 · {shots.length * 5}积点)</span>
+            </button>
+          )}
           <button
             onClick={() => { playClick(); onGenerateVideo(selectedRatio); }}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm transition-all duration-300 hover:border-scarlet-glow hover:shadow-scarlet text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="使用AI一键生成视频，消耗5积点"
           >
             <Clapperboard size={14} strokeWidth={1.5} className="text-scarlet" />
-            一键生成视频
+            一键成片
             <span className="text-[10px] text-muted-foreground ml-1">({selectedRatio} · 5积点)</span>
           </button>
         </div>

@@ -218,6 +218,10 @@ const Index = () => {
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
+      if (data?.ragUsed) {
+        toast.info('已参考经典电影分镜手法与自然常识知识库');
+      }
+
       if (duration === 'long') {
         if (data?.tree && data?.sceneShotsMap) {
           setScriptTree(data.tree);
@@ -417,7 +421,7 @@ const Index = () => {
     }
   }, []);
 
-  // Video generation
+  // Video generation (single combined prompt)
   const handleGenerateVideo = useCallback(async (ratio?: string) => {
     const processingJobs = videoJobs.filter(j => j.status === 'processing');
     if (processingJobs.length >= 3) {
@@ -444,7 +448,7 @@ const Index = () => {
         task_id: taskId,
         prompt: prompt.slice(0, 2000),
         status: 'processing',
-        title: allShots[0]?.visual?.slice(0, 60) || '视频项目',
+        title: scriptTitle || allShots[0]?.visual?.slice(0, 60) || '视频项目',
         user_id: user?.id || null,
       };
       const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
@@ -456,6 +460,64 @@ const Index = () => {
     } catch (e: any) {
       console.error('Video generation error:', e);
       toast.error(e.message || '视频生成失败');
+    }
+  }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob, scriptTitle]);
+
+  // Per-shot video generation (each shot gets its own optimized prompt)
+  const handleGenerateVideoPerShot = useCallback(async (ratio?: string) => {
+    const allShots = durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots;
+    const processingJobs = videoJobs.filter(j => j.status === 'processing');
+    if (processingJobs.length + allShots.length > 10) {
+      toast.warning(`逐镜生成将提交${allShots.length}个任务，当前队列已满，请等待部分完成`);
+      return;
+    }
+
+    toast.info(`开始逐镜生成 ${allShots.length} 个视频片段…`);
+    let submitted = 0;
+
+    for (const [i, shot] of allShots.entries()) {
+      // Build per-shot cinematic prompt
+      const shotPrompt = [
+        `景别: ${shot.shotType}`,
+        `画面: ${shot.visual}`,
+        shot.dialogue ? `台词: ${shot.dialogue}` : '',
+        shot.directorNote ? `导演指示: ${shot.directorNote}` : '',
+        shot.audio ? `音效氛围: ${shot.audio}` : '',
+        `时长: ${shot.duration}`,
+        ratio ? `画面比例: ${ratio}` : '',
+      ].filter(Boolean).join('。');
+
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-video', {
+          body: { action: 'submit', prompt: shotPrompt },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+
+        const taskId = data?.taskId;
+        if (!taskId) continue;
+
+        const dbRow = {
+          task_id: taskId,
+          prompt: shotPrompt.slice(0, 2000),
+          status: 'processing',
+          title: `镜头${i + 1} · ${shot.shotType} · ${shot.visual.slice(0, 30)}`,
+          user_id: user?.id || null,
+        };
+        const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
+        const jobDbId = inserted?.id || taskId;
+
+        addJob({ id: jobDbId, taskId, prompt: shotPrompt, status: 'processing', startedAt: Date.now() }, taskId);
+        submitted++;
+      } catch (e: any) {
+        console.error(`Shot ${i + 1} video error:`, e);
+        toast.error(`镜头${i + 1}提交失败: ${e.message}`);
+      }
+    }
+
+    if (submitted > 0) {
+      toast.success(`已提交 ${submitted}/${allShots.length} 个镜头的视频生成任务`);
+      setCredits(c => Math.max(0, c - submitted * 5));
     }
   }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob]);
 
@@ -534,6 +596,7 @@ const Index = () => {
                     credits={credits}
                     onPreview={() => setShowPreview(true)}
                     onGenerateVideo={handleGenerateVideo}
+                    onGenerateVideoPerShot={handleGenerateVideoPerShot}
                     title={scriptTitle}
                     onTitleChange={setScriptTitle}
                     inspiration={inspiration}
@@ -553,6 +616,7 @@ const Index = () => {
                 credits={credits}
                 onPreview={() => setShowPreview(true)}
                 onGenerateVideo={handleGenerateVideo}
+                onGenerateVideoPerShot={handleGenerateVideoPerShot}
                 title={scriptTitle}
                 onTitleChange={setScriptTitle}
                 inspiration={inspiration}
