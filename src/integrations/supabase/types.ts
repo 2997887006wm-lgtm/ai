@@ -59,6 +59,33 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_base: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          title: string
+        }
+        Insert: {
+          category?: string
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          title: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -236,7 +263,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_knowledge: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          query_embedding_text: string
+        }
+        Returns: {
+          category: string
+          content: string
+          id: string
+          similarity: number
+          title: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

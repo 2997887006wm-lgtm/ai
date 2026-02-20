@@ -17,3 +17,12 @@ verify_jwt = false
 
 [functions.generate-video]
 verify_jwt = false
+
+[functions.rag-ingest]
+verify_jwt = false
+
+[functions.rag-search]
+verify_jwt = false
+
+[functions.recommend-audio]
+verify_jwt = false
