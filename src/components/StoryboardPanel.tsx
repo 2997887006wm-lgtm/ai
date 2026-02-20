@@ -90,7 +90,7 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
         </button>
         <button
           onClick={() => { playClick(); onGenerateVideo(); }}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm transition-all duration-300 hover:border-scarlet-glow hover:shadow-scarlet text-foreground"
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm transition-all duration-300 hover:border-scarlet-glow hover:shadow-scarlet text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Clapperboard size={14} strokeWidth={1.5} className="text-scarlet" />
           一键生成视频
