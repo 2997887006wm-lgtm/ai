@@ -44,6 +44,48 @@ export type Database = {
         }
         Relationships: []
       }
+      scripts: {
+        Row: {
+          created_at: string
+          duration_type: string
+          id: string
+          inspiration: string | null
+          mood: string | null
+          scene_shots_map: Json | null
+          script_tree: Json | null
+          shots: Json
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_type?: string
+          id?: string
+          inspiration?: string | null
+          mood?: string | null
+          scene_shots_map?: Json | null
+          script_tree?: Json | null
+          shots?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_type?: string
+          id?: string
+          inspiration?: string | null
+          mood?: string | null
+          scene_shots_map?: Json | null
+          script_tree?: Json | null
+          shots?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       video_jobs: {
         Row: {
           created_at: string

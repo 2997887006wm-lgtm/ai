@@ -19,6 +19,7 @@ interface Shot {
   directorNote: string;
   imageUrl?: string;
   emotionIntensity?: number;
+  dialogueSuggestion?: string;
 }
 
 interface StoryboardCardProps {
@@ -230,6 +231,28 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
               </button>
               <VoiceOverButton text={shot.dialogue} />
             </div>
+
+            {/* Dialogue suggestion */}
+            {shot.dialogueSuggestion && !shot.dialogue && (
+              <div className="mt-1.5 p-2 rounded-md bg-primary/5 border border-primary/10">
+                <p className="text-[10px] text-primary/60 mb-1">AI 台词建议：</p>
+                <p className="text-xs text-foreground/70 italic leading-relaxed">"{shot.dialogueSuggestion}"</p>
+                <div className="flex gap-2 mt-1.5">
+                  <button
+                    onClick={() => { onUpdate(shot.id, 'dialogue', shot.dialogueSuggestion!); }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    采用
+                  </button>
+                  <button
+                    onClick={() => { onUpdate(shot.id, 'dialogueSuggestion' as keyof Shot, ''); }}
+                    className="text-[10px] px-2 py-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                  >
+                    忽略
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           {/* Audio field + picker */}
           <div className="relative">
