@@ -10,7 +10,7 @@ import { HistoryPanel } from '@/components/HistoryPanel';
 import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScriptTree';
 import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
-import { Music } from 'lucide-react';
+import { Music, Video } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import type { Shot } from '@/components/StoryboardCard';
 
@@ -58,7 +58,7 @@ function getFirstLeafId(node: TreeNode): string | null {
 type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
+  const [activeTab, setActiveTab] = useState<'new' | 'history' | 'videos'>('new');
   const [phase, setPhase] = useState<Phase>('input');
   const [credits, setCredits] = useState(15);
   const [showCredits, setShowCredits] = useState(false);
@@ -346,6 +346,7 @@ const Index = () => {
         credits={credits}
         onNewProject={handleNewProject}
         onHistory={() => setActiveTab('history')}
+        onVideoLibrary={() => setActiveTab('videos')}
         onCreditsClick={() => setShowCredits(true)}
         activeTab={activeTab}
       />
@@ -354,6 +355,15 @@ const Index = () => {
         {activeTab === 'history' ? (
           <div className="px-12 py-16">
             <HistoryPanel />
+          </div>
+        ) : activeTab === 'videos' ? (
+          <div className="px-12 py-16">
+            <h1 className="text-2xl font-serif-cn font-medium text-foreground mb-2">视频库</h1>
+            <p className="text-sm text-muted-foreground mb-8">在这里查看所有已生成的视频</p>
+            <div className="text-center py-20 text-muted-foreground text-sm">
+              <Video size={32} className="mx-auto mb-3 opacity-30" />
+              暂无已生成的视频
+            </div>
           </div>
         ) : (
           <div className="px-12 py-16">
