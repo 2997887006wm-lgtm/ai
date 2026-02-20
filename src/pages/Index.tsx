@@ -10,8 +10,11 @@ import { HistoryPanel } from '@/components/HistoryPanel';
 import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScriptTree';
 import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
-import { Music, Video } from 'lucide-react';
+import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
+import { VideoProgressPanel, type VideoJobTracker } from '@/components/VideoProgressPanel';
+import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
+import { useAuth } from '@/hooks/useAuth';
 import type { Shot } from '@/components/StoryboardCard';
 
 let nextShotId = 100;
@@ -43,13 +46,11 @@ function renumberTree(node: TreeNode): TreeNode {
   return { ...node, children };
 }
 
-/** Get all leaf node ids from tree */
 function getLeafIds(node: TreeNode): string[] {
   if (!node.children || node.children.length === 0) return [node.id];
   return node.children.flatMap(getLeafIds);
 }
 
-/** Get first leaf id */
 function getFirstLeafId(node: TreeNode): string | null {
   if (!node.children || node.children.length === 0) return node.id;
   return getFirstLeafId(node.children[0]);
@@ -58,6 +59,7 @@ function getFirstLeafId(node: TreeNode): string | null {
 type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'new' | 'history' | 'videos'>('new');
   const [phase, setPhase] = useState<Phase>('input');
   const [credits, setCredits] = useState(15);
@@ -70,8 +72,9 @@ const Index = () => {
   const [activeTreeNode, setActiveTreeNode] = useState<string | null>(null);
   const [scriptTree, setScriptTree] = useState<TreeNode>({ id: 'root', label: '总纲', children: [] });
   const [sceneShotsMap, setSceneShotsMap] = useState<Record<string, Shot[]>>({});
-  const [videoGenerating, setVideoGenerating] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [videoJobs, setVideoJobs] = useState<VideoJobTracker[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const pollRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // For long-form mode: sync shots from sceneShotsMap when activeTreeNode changes
   useEffect(() => {
@@ -87,18 +90,35 @@ const Index = () => {
     }
   }, [durationType, activeTreeNode]);
 
+  // Cancel generation
+  const handleCancelGenerate = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsGenerating(false);
+    toast.info('已停止生成，您可以修改指令后重新生成');
+  }, []);
+
   const handleGenerate = useCallback(async (inspiration: string, duration: 'short' | 'long', mood: string) => {
     setDurationType(duration);
     setIsGenerating(true);
+    
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const { data, error } = await supabase.functions.invoke('generate-script', {
         body: { inspiration, duration, mood },
       });
+      
+      // Check if aborted
+      if (controller.signal.aborted) return;
+      
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
       if (duration === 'long') {
-        // Long-form: parse tree + sceneShotsMap
         if (data?.tree && data?.sceneShotsMap) {
           setScriptTree(data.tree);
           const parsedMap: Record<string, Shot[]> = {};
@@ -123,7 +143,6 @@ const Index = () => {
           }
         }
       } else {
-        // Short-form
         if (data?.shots && Array.isArray(data.shots)) {
           const parsed: Shot[] = data.shots.map((s: any, i: number) => ({
             id: nextShotId++,
@@ -141,10 +160,14 @@ const Index = () => {
       }
       setPhase('style');
     } catch (e: any) {
+      if (e.name === 'AbortError' || controller.signal.aborted) return;
       console.error('Script generation error:', e);
       toast.error(e.message || '脚本生成失败，请重试');
     } finally {
-      setIsGenerating(false);
+      if (!controller.signal.aborted) {
+        setIsGenerating(false);
+      }
+      abortRef.current = null;
     }
   }, []);
 
@@ -153,11 +176,7 @@ const Index = () => {
   }, []);
 
   const handleUpdateShot = useCallback((id: number, field: keyof Shot, value: string) => {
-    setShots((prev) => {
-      const updated = prev.map((s) => (s.id === id ? { ...s, [field]: value } : s));
-      return updated;
-    });
-    // Also sync to map for long-form
+    setShots((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
     if (durationType === 'long' && activeTreeNode) {
       setSceneShotsMap(prev => {
         const current = prev[activeTreeNode] || [];
@@ -174,16 +193,14 @@ const Index = () => {
       const next = [...prev];
       const [moved] = next.splice(oldIndex, 1);
       next.splice(newIndex, 0, moved);
-      const renumbered = next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
-      return renumbered;
+      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
     });
   }, []);
 
   const handleDeleteShot = useCallback((id: number) => {
     setShots((prev) => {
       const next = prev.filter((s) => s.id !== id);
-      const renumbered = next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
-      return renumbered;
+      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
     });
   }, []);
 
@@ -192,15 +209,8 @@ const Index = () => {
       const idx = prev.findIndex((s) => s.id === afterId);
       if (idx === -1) return prev;
       const newShot: Shot = {
-        id: nextShotId++,
-        shotNumber: '',
-        shotType: '中景',
-        visual: '',
-        duration: '5s',
-        dialogue: '',
-        audio: '',
-        character: '',
-        directorNote: '',
+        id: nextShotId++, shotNumber: '', shotType: '中景', visual: '',
+        duration: '5s', dialogue: '', audio: '', character: '', directorNote: '',
       };
       const next = [...prev];
       next.splice(idx + 1, 0, newShot);
@@ -211,21 +221,14 @@ const Index = () => {
   const handleAddShot = useCallback(() => {
     setShots((prev) => {
       const newShot: Shot = {
-        id: nextShotId++,
-        shotNumber: String(prev.length + 1).padStart(2, '0'),
-        shotType: '中景',
-        visual: '',
-        duration: '5s',
-        dialogue: '',
-        audio: '',
-        character: '',
-        directorNote: '',
+        id: nextShotId++, shotNumber: String(prev.length + 1).padStart(2, '0'),
+        shotType: '中景', visual: '', duration: '5s', dialogue: '', audio: '',
+        character: '', directorNote: '',
       };
       return [...prev, newShot];
     });
   }, []);
 
-  // After shots change in long-form mode, sync back
   useEffect(() => {
     if (durationType === 'long' && activeTreeNode) {
       syncShotsToMap(shots);
@@ -233,11 +236,8 @@ const Index = () => {
   }, [shots, durationType, activeTreeNode, syncShotsToMap]);
 
   const handleTreeNodeSelect = useCallback((id: string) => {
-    // Only select leaf nodes (scenes), not act nodes
     const leaves = getLeafIds(scriptTree);
-    if (leaves.includes(id)) {
-      setActiveTreeNode(id);
-    }
+    if (leaves.includes(id)) setActiveTreeNode(id);
   }, [scriptTree]);
 
   const handleTreeReorder = useCallback((parentId: string, activeId: string, overId: string) => {
@@ -252,23 +252,21 @@ const Index = () => {
         }
         return { ...node, children };
       }
-      if (node.children) {
-        return { ...node, children: node.children.map(reorderChildren) };
-      }
+      if (node.children) return { ...node, children: node.children.map(reorderChildren) };
       return node;
     };
     setScriptTree(prev => renumberTree(reorderChildren(prev)));
   }, []);
 
+  // Video generation with DB tracking
   const handleGenerateVideo = useCallback(async () => {
-    if (videoGenerating) return;
-    setVideoGenerating(true);
+    const processingJobs = videoJobs.filter(j => j.status === 'processing');
+    if (processingJobs.length >= 3) {
+      toast.warning('最多同时生成3个视频，请等待完成');
+      return;
+    }
 
-    // Build a combined prompt from all shots
-    const allShots = durationType === 'long'
-      ? Object.values(sceneShotsMap).flat()
-      : shots;
-
+    const allShots = durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots;
     const prompt = allShots.map((s, i) =>
       `镜头${i + 1}(${s.shotType}): ${s.visual}${s.dialogue ? ` 台词：${s.dialogue}` : ''}`
     ).join('；');
@@ -283,47 +281,85 @@ const Index = () => {
       const taskId = data?.taskId;
       if (!taskId) throw new Error('未获取到视频任务ID');
 
-      toast.info('视频生成任务已提交，预计需要2-5分钟...');
-      setCredits((c) => Math.max(0, c - 5));
+      // Save to DB
+      const dbRow = {
+        task_id: taskId,
+        prompt: prompt.slice(0, 2000),
+        status: 'processing',
+        title: allShots[0]?.visual?.slice(0, 60) || '视频项目',
+        user_id: user?.id || null,
+      };
+      const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
+      const jobDbId = inserted?.id || taskId;
 
-      // Start polling
-      pollRef.current = setInterval(async () => {
+      // Add to local tracker
+      const job: VideoJobTracker = {
+        id: jobDbId,
+        taskId,
+        prompt,
+        status: 'processing',
+        startedAt: Date.now(),
+      };
+      setVideoJobs(prev => [job, ...prev]);
+      toast.info('视频生成任务已提交，预计需要2-5分钟');
+      setCredits(c => Math.max(0, c - 5));
+
+      // Poll
+      pollRefs.current[jobDbId] = setInterval(async () => {
         try {
-          const { data: pollData, error: pollError } = await supabase.functions.invoke('generate-video', {
+          const { data: pollData } = await supabase.functions.invoke('generate-video', {
             body: { action: 'poll', taskId },
           });
-          if (pollError || pollData?.error) {
-            console.error('Poll error:', pollError || pollData?.error);
-            return;
-          }
+
           if (pollData?.status === 'SUCCESS' && pollData?.videoUrl) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            pollRef.current = null;
-            setVideoGenerating(false);
+            clearInterval(pollRefs.current[jobDbId]);
+            delete pollRefs.current[jobDbId];
+            // Update DB
+            await supabase.from('video_jobs').update({
+              status: 'success',
+              video_url: pollData.videoUrl,
+              thumbnail_url: pollData.coverUrl || null,
+            }).eq('id', jobDbId);
+            // Update local
+            setVideoJobs(prev => prev.map(j =>
+              j.id === jobDbId ? { ...j, status: 'success', videoUrl: pollData.videoUrl } : j
+            ));
             toast.success('视频生成完成！');
-            window.open(pollData.videoUrl, '_blank');
           } else if (pollData?.status === 'FAIL') {
-            if (pollRef.current) clearInterval(pollRef.current);
-            pollRef.current = null;
-            setVideoGenerating(false);
-            toast.error('视频生成失败，请重试');
+            clearInterval(pollRefs.current[jobDbId]);
+            delete pollRefs.current[jobDbId];
+            await supabase.from('video_jobs').update({ status: 'failed' }).eq('id', jobDbId);
+            setVideoJobs(prev => prev.map(j =>
+              j.id === jobDbId ? { ...j, status: 'failed' } : j
+            ));
+            toast.error('视频生成失败');
           }
-        } catch {
-          // ignore transient poll errors
-        }
+        } catch { /* ignore transient */ }
       }, 10000);
     } catch (e: any) {
       console.error('Video generation error:', e);
       toast.error(e.message || '视频生成失败');
-      setVideoGenerating(false);
     }
-  }, [shots, sceneShotsMap, durationType, videoGenerating]);
+  }, [shots, sceneShotsMap, durationType, videoJobs, user]);
 
-  // Cleanup polling on unmount
+  // Cleanup polls on unmount
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      Object.values(pollRefs.current).forEach(clearInterval);
     };
+  }, []);
+
+  // Re-render timer for progress panel
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const hasProcessing = videoJobs.some(j => j.status === 'processing');
+    if (!hasProcessing) return;
+    const timer = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [videoJobs]);
+
+  const handleDismissJob = useCallback((id: string) => {
+    setVideoJobs(prev => prev.filter(j => j.id !== id));
   }, []);
 
   const handleNewProject = () => {
@@ -335,7 +371,6 @@ const Index = () => {
     setActiveTreeNode(null);
   };
 
-  // Get all shots for preview (long-form: all scenes combined)
   const allShotsForPreview = durationType === 'long'
     ? Object.values(sceneShotsMap).flat()
     : shots;
@@ -360,10 +395,7 @@ const Index = () => {
           <div className="px-12 py-16">
             <h1 className="text-2xl font-serif-cn font-medium text-foreground mb-2">视频库</h1>
             <p className="text-sm text-muted-foreground mb-8">在这里查看所有已生成的视频</p>
-            <div className="text-center py-20 text-muted-foreground text-sm">
-              <Video size={32} className="mx-auto mb-3 opacity-30" />
-              暂无已生成的视频
-            </div>
+            <VideoLibraryPanel />
           </div>
         ) : (
           <div className="px-12 py-16">
@@ -375,7 +407,11 @@ const Index = () => {
             )}
 
             {phase === 'input' && (
-              <InspirationInput onGenerate={handleGenerate} isGenerating={isGenerating} />
+              <InspirationInput
+                onGenerate={handleGenerate}
+                onCancel={handleCancelGenerate}
+                isGenerating={isGenerating}
+              />
             )}
 
             {phase === 'storyboard' && durationType === 'long' && (
@@ -421,7 +457,7 @@ const Index = () => {
         )}
 
         {/* Floating audio lib button */}
-        {phase === 'storyboard' && (
+        {phase === 'storyboard' && activeTab === 'new' && (
           <button
             onClick={() => { playClick(); setShowAudioLib(true); }}
             className="fixed bottom-8 right-8 w-12 h-12 rounded-full bg-card border border-border shadow-card flex items-center justify-center text-muted-foreground hover:text-scarlet hover:shadow-elevated transition-all duration-500 z-40"
@@ -431,6 +467,9 @@ const Index = () => {
           </button>
         )}
       </main>
+
+      {/* Video progress tracker */}
+      <VideoProgressPanel jobs={videoJobs} onDismiss={handleDismissJob} />
 
       <StyleDrawer
         visible={phase === 'style'}
