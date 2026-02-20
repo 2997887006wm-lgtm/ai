@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Video, ExternalLink, Trash2, Loader2 } from 'lucide-react';
+import { Video, ExternalLink, Trash2, Loader2, PlayCircle } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { VideoSequencePlayer, type VideoClip } from './VideoSequencePlayer';
 
 interface VideoJob {
   id: string;
@@ -20,6 +21,7 @@ export function VideoLibraryPanel() {
   const { user } = useAuth();
   const [videos, setVideos] = useState<VideoJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPlayer, setShowPlayer] = useState(false);
 
   const fetchVideos = async () => {
     setLoading(true);
@@ -89,8 +91,23 @@ export function VideoLibraryPanel() {
     );
   }
 
+  const completedClips: VideoClip[] = videos
+    .filter(v => v.status === 'success' && v.video_url)
+    .map(v => ({ url: v.video_url!, title: v.title || v.prompt.slice(0, 40), thumbnailUrl: v.thumbnail_url }));
+
   return (
     <div className="grid gap-4">
+      {completedClips.length >= 2 && (
+        <button
+          onClick={() => { playClick(); setShowPlayer(true); }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-primary/30 text-sm text-foreground hover:border-primary hover:bg-primary/5 transition-all duration-300 w-fit mx-auto mb-2"
+        >
+          <PlayCircle size={16} className="text-primary" />
+          拼接预览全部视频
+          <span className="text-[10px] text-muted-foreground">({completedClips.length}个片段)</span>
+        </button>
+      )}
+
       {videos.map((v) => (
         <div
           key={v.id}
@@ -142,6 +159,12 @@ export function VideoLibraryPanel() {
           </div>
         </div>
       ))}
+
+      <VideoSequencePlayer
+        open={showPlayer}
+        onOpenChange={setShowPlayer}
+        clips={completedClips}
+      />
     </div>
   );
 }
