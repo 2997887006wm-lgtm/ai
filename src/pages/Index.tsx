@@ -13,6 +13,8 @@ import type { Shot } from '@/components/StoryboardCard';
 
 let nextShotId = 100;
 
+const CN_NUMBERS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+
 const MOCK_SHORT_SHOTS: Shot[] = [
   { id: 1, shotNumber: '01', shotType: '大远景', visual: '晨雾弥漫的山谷，一条蜿蜒小路隐入远方的松林', duration: '8s', dialogue: '', audio: '远处鸟鸣，风穿过松针的沙沙声', character: '', directorNote: '以缓慢推进开场，建立孤独而宁静的情绪基底' },
   { id: 2, shotNumber: '02', shotType: '中景', visual: '一双旧布鞋踩过露湿的碎石路，步伐从容', duration: '5s', dialogue: '', audio: '碎石轻响，布料摩擦', character: '行者 — 年约四十，面容平静', directorNote: '不露面容，仅以脚步暗示人物性格' },
@@ -38,6 +40,24 @@ const MOCK_TREE: TreeNode = {
   ],
 };
 
+/** Renumber tree labels after reorder (幕 and 场景 sequences) */
+function renumberTree(node: TreeNode): TreeNode {
+  if (!node.children) return node;
+  const children = node.children.map((child, i) => {
+    const num = CN_NUMBERS[i] || String(i + 1);
+    let newLabel = child.label;
+    const actMatch = child.label.match(/^第.+?幕\s*·?\s*(.*)/);
+    const sceneMatch = child.label.match(/^场景.+?\s*·?\s*(.*)/);
+    if (actMatch) {
+      newLabel = `第${num}幕 · ${actMatch[1]}`;
+    } else if (sceneMatch) {
+      newLabel = `场景${num} · ${sceneMatch[1]}`;
+    }
+    return renumberTree({ ...child, label: newLabel });
+  });
+  return { ...node, children };
+}
+
 type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
@@ -52,7 +72,7 @@ const Index = () => {
   const [activeTreeNode, setActiveTreeNode] = useState<string | null>('act1-s1');
   const [scriptTree, setScriptTree] = useState<TreeNode>(MOCK_TREE);
 
-  const handleGenerate = useCallback((_inspiration: string, duration: 'short' | 'long') => {
+  const handleGenerate = useCallback((_inspiration: string, duration: 'short' | 'long', _mood: string) => {
     setDurationType(duration);
     setIsGenerating(true);
     setTimeout(() => {
@@ -143,7 +163,7 @@ const Index = () => {
       }
       return node;
     };
-    setScriptTree(prev => reorderChildren(prev));
+    setScriptTree(prev => renumberTree(reorderChildren(prev)));
   }, []);
 
   const handleNewProject = () => {
@@ -223,7 +243,7 @@ const Index = () => {
           </div>
         )}
 
-        {/* Floating audio lib button - visible in storyboard phase */}
+        {/* Floating audio lib button */}
         {phase === 'storyboard' && (
           <button
             onClick={() => { playClick(); setShowAudioLib(true); }}

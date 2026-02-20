@@ -4,6 +4,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2, Plus, ImagePlus, MessageSquarePlus, Mic, Loader2 } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
+import { VoiceOverButton } from './VoiceOverButton';
+import { ShotAudioPicker } from './ShotAudioPicker';
 
 interface Shot {
   id: number;
@@ -26,15 +28,16 @@ interface StoryboardCardProps {
   onInsertAfter: (id: number) => void;
 }
 
-function InlineField({ label, value, onChange, multiline = false }: {
+function InlineField({ label, value, onChange, multiline = false, highlight = false }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   multiline?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <div className="group">
-      <label className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/50 mb-1 block font-sans-clean">
+      <label className="text-xs uppercase tracking-[0.12em] text-foreground/60 mb-1 block font-medium font-sans-clean">
         {label}
       </label>
       {multiline ? (
@@ -48,7 +51,9 @@ function InlineField({ label, value, onChange, multiline = false }: {
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-transparent inline-editable px-2 py-1 text-sm outline-none"
+          className={`w-full bg-transparent inline-editable px-2 py-1 outline-none ${
+            highlight ? 'text-base font-semibold text-foreground' : 'text-sm'
+          }`}
         />
       )}
     </div>
@@ -141,16 +146,18 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
           >
             <GripVertical size={16} strokeWidth={1.5} />
           </button>
-          <span className="text-xs font-mono text-muted-foreground/40 w-8">#{shot.shotNumber}</span>
+          <span className="text-sm font-mono font-bold text-scarlet/70 w-10">#{shot.shotNumber}</span>
           <InlineField
             label="景别"
             value={shot.shotType}
             onChange={(v) => onUpdate(shot.id, 'shotType', v)}
+            highlight
           />
           <InlineField
             label="预估时长"
             value={shot.duration}
             onChange={(v) => onUpdate(shot.id, 'duration', v)}
+            highlight
           />
           <div className="flex-1" />
           <button
@@ -192,7 +199,7 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
           </button>
         </div>
 
-        {/* Dialogue + AI generate buttons */}
+        {/* Dialogue + AI generate + VoiceOver */}
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div className="relative">
             <InlineField
@@ -220,14 +227,21 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
                 <Mic size={9} strokeWidth={2} />
                 口播
               </button>
+              <VoiceOverButton text={shot.dialogue} />
             </div>
           </div>
-          <InlineField
-            label="听觉营造"
-            value={shot.audio}
-            onChange={(v) => onUpdate(shot.id, 'audio', v)}
-            multiline
-          />
+          {/* Audio field + picker */}
+          <div className="relative">
+            <InlineField
+              label="听觉营造"
+              value={shot.audio}
+              onChange={(v) => onUpdate(shot.id, 'audio', v)}
+              multiline
+            />
+            <div className="absolute top-0 right-0">
+              <ShotAudioPicker onSelect={(name) => onUpdate(shot.id, 'audio', name)} />
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mt-4">
