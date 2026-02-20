@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { StoryboardCard, type Shot } from './StoryboardCard';
-import { FileDown, Clapperboard } from 'lucide-react';
+import { FileDown, Clapperboard, Plus } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import {
   DndContext,
@@ -22,12 +22,15 @@ interface StoryboardPanelProps {
   shots: Shot[];
   onUpdateShot: (id: number, field: keyof Shot, value: string) => void;
   onReorderShots: (activeId: number, overId: number) => void;
+  onDeleteShot: (id: number) => void;
+  onInsertShot: (afterId: number) => void;
+  onAddShot: () => void;
   credits: number;
   onExport: () => void;
   onGenerateVideo: () => void;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, credits, onExport, onGenerateVideo }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onExport, onGenerateVideo }: StoryboardPanelProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -42,9 +45,18 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, credits, 
 
   return (
     <div className="w-full max-w-3xl mx-auto animate-fade-in">
-      <div className="mb-8">
-        <h2 className="text-lg font-serif-cn text-foreground mb-1">沉浸式分镜操作板</h2>
-        <p className="text-xs text-muted-foreground">所有字段均可直接编辑 · 拖拽手柄调整顺序</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-serif-cn text-foreground mb-1">沉浸式分镜操作板</h2>
+          <p className="text-xs text-muted-foreground">所有字段均可直接编辑 · 拖拽手柄调整顺序</p>
+        </div>
+        <button
+          onClick={() => { playClick(); onAddShot(); }}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-300"
+        >
+          <Plus size={12} strokeWidth={2} />
+          添加分镜
+        </button>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis]}>
@@ -56,6 +68,8 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, credits, 
                 shot={shot}
                 index={i}
                 onUpdate={onUpdateShot}
+                onDelete={onDeleteShot}
+                onInsertAfter={onInsertShot}
               />
             ))}
           </div>

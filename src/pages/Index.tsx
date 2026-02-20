@@ -5,8 +5,13 @@ import { StyleDrawer } from '@/components/StyleDrawer';
 import { StoryboardPanel } from '@/components/StoryboardPanel';
 import { CreditsModal } from '@/components/CreditsModal';
 import { HistoryPanel } from '@/components/HistoryPanel';
-import { ScriptTreeNode, type TreeNode } from '@/components/ScriptTreeNode';
+import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScriptTree';
+import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
+import { Music } from 'lucide-react';
+import { playClick } from '@/utils/audio';
 import type { Shot } from '@/components/StoryboardCard';
+
+let nextShotId = 100;
 
 const MOCK_SHORT_SHOTS: Shot[] = [
   { id: 1, shotNumber: '01', shotType: '大远景', visual: '晨雾弥漫的山谷，一条蜿蜒小路隐入远方的松林', duration: '8s', dialogue: '', audio: '远处鸟鸣，风穿过松针的沙沙声', character: '', directorNote: '以缓慢推进开场，建立孤独而宁静的情绪基底' },
@@ -40,10 +45,12 @@ const Index = () => {
   const [phase, setPhase] = useState<Phase>('input');
   const [credits, setCredits] = useState(15);
   const [showCredits, setShowCredits] = useState(false);
+  const [showAudioLib, setShowAudioLib] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [durationType, setDurationType] = useState<'short' | 'long'>('short');
   const [shots, setShots] = useState<Shot[]>(MOCK_SHORT_SHOTS);
   const [activeTreeNode, setActiveTreeNode] = useState<string | null>('act1-s1');
+  const [scriptTree, setScriptTree] = useState<TreeNode>(MOCK_TREE);
 
   const handleGenerate = useCallback((_inspiration: string, duration: 'short' | 'long') => {
     setDurationType(duration);
@@ -74,10 +81,76 @@ const Index = () => {
     });
   }, []);
 
+  const handleDeleteShot = useCallback((id: number) => {
+    setShots((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+    });
+  }, []);
+
+  const handleInsertShot = useCallback((afterId: number) => {
+    setShots((prev) => {
+      const idx = prev.findIndex((s) => s.id === afterId);
+      if (idx === -1) return prev;
+      const newShot: Shot = {
+        id: nextShotId++,
+        shotNumber: '',
+        shotType: '中景',
+        visual: '',
+        duration: '5s',
+        dialogue: '',
+        audio: '',
+        character: '',
+        directorNote: '',
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, newShot);
+      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+    });
+  }, []);
+
+  const handleAddShot = useCallback(() => {
+    setShots((prev) => {
+      const newShot: Shot = {
+        id: nextShotId++,
+        shotNumber: String(prev.length + 1).padStart(2, '0'),
+        shotType: '中景',
+        visual: '',
+        duration: '5s',
+        dialogue: '',
+        audio: '',
+        character: '',
+        directorNote: '',
+      };
+      return [...prev, newShot];
+    });
+  }, []);
+
+  const handleTreeReorder = useCallback((parentId: string, activeId: string, overId: string) => {
+    const reorderChildren = (node: TreeNode): TreeNode => {
+      if (node.id === parentId && node.children) {
+        const children = [...node.children];
+        const oldIdx = children.findIndex(c => c.id === activeId);
+        const newIdx = children.findIndex(c => c.id === overId);
+        if (oldIdx !== -1 && newIdx !== -1) {
+          const [moved] = children.splice(oldIdx, 1);
+          children.splice(newIdx, 0, moved);
+        }
+        return { ...node, children };
+      }
+      if (node.children) {
+        return { ...node, children: node.children.map(reorderChildren) };
+      }
+      return node;
+    };
+    setScriptTree(prev => reorderChildren(prev));
+  }, []);
+
   const handleNewProject = () => {
     setActiveTab('new');
     setPhase('input');
     setShots(MOCK_SHORT_SHOTS);
+    setScriptTree(MOCK_TREE);
   };
 
   return (
@@ -97,7 +170,6 @@ const Index = () => {
           </div>
         ) : (
           <div className="px-12 py-16">
-            {/* Title area */}
             {phase === 'input' && (
               <div className="max-w-3xl mx-auto mb-16 animate-fade-in">
                 <h1 className="text-2xl font-serif-cn font-medium text-foreground mb-2">剧本工作台</h1>
@@ -111,21 +183,22 @@ const Index = () => {
 
             {phase === 'storyboard' && durationType === 'long' && (
               <div className="flex gap-8 max-w-5xl mx-auto">
-                {/* Tree sidebar */}
                 <div className="w-56 shrink-0 animate-fade-in">
-                  <p className="text-xs text-muted-foreground/50 mb-4 uppercase tracking-widest">剧本结构</p>
-                  <ScriptTreeNode
-                    node={MOCK_TREE}
+                  <DraggableScriptTree
+                    tree={scriptTree}
                     activeId={activeTreeNode}
                     onSelect={setActiveTreeNode}
+                    onReorder={handleTreeReorder}
                   />
                 </div>
-                {/* Storyboard */}
                 <div className="flex-1 animate-slide-in-right">
                   <StoryboardPanel
                     shots={shots}
                     onUpdateShot={handleUpdateShot}
                     onReorderShots={handleReorderShots}
+                    onDeleteShot={handleDeleteShot}
+                    onInsertShot={handleInsertShot}
+                    onAddShot={handleAddShot}
                     credits={credits}
                     onExport={() => {}}
                     onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
@@ -139,12 +212,26 @@ const Index = () => {
                 shots={shots}
                 onUpdateShot={handleUpdateShot}
                 onReorderShots={handleReorderShots}
+                onDeleteShot={handleDeleteShot}
+                onInsertShot={handleInsertShot}
+                onAddShot={handleAddShot}
                 credits={credits}
                 onExport={() => {}}
                 onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
               />
             )}
           </div>
+        )}
+
+        {/* Floating audio lib button - visible in storyboard phase */}
+        {phase === 'storyboard' && (
+          <button
+            onClick={() => { playClick(); setShowAudioLib(true); }}
+            className="fixed bottom-8 right-8 w-12 h-12 rounded-full bg-card border border-border shadow-card flex items-center justify-center text-muted-foreground hover:text-scarlet hover:shadow-elevated transition-all duration-500 z-40"
+            title="音效与音乐库"
+          >
+            <Music size={18} strokeWidth={1.5} />
+          </button>
         )}
       </main>
 
@@ -158,6 +245,11 @@ const Index = () => {
         visible={showCredits}
         credits={credits}
         onClose={() => setShowCredits(false)}
+      />
+
+      <AudioLibraryPanel
+        visible={showAudioLib}
+        onClose={() => setShowAudioLib(false)}
       />
     </div>
   );
