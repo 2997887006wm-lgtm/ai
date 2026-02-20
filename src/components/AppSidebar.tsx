@@ -27,7 +27,7 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
       {/* Top nav */}
       <nav className="flex flex-col items-center gap-6">
         <div className="w-8 h-8 rounded-full bg-charcoal-lighter flex items-center justify-center mb-4">
-          <span className="font-serif text-xs text-scarlet-light font-semibold">幕</span>
+          <span className="font-serif text-xs text-scarlet-light font-semibold">墨</span>
         </div>
 
         {navItems.map(({ id, icon: Icon, title, onClick }) => (
