@@ -7,9 +7,9 @@ import { CreditsModal } from '@/components/CreditsModal';
 import { HistoryPanel } from '@/components/HistoryPanel';
 import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScriptTree';
 import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
+import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
-import { exportScriptDocument } from '@/utils/exportScript';
 import type { Shot } from '@/components/StoryboardCard';
 
 let nextShotId = 100;
@@ -67,6 +67,7 @@ const Index = () => {
   const [credits, setCredits] = useState(15);
   const [showCredits, setShowCredits] = useState(false);
   const [showAudioLib, setShowAudioLib] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [durationType, setDurationType] = useState<'short' | 'long'>('short');
   const [shots, setShots] = useState<Shot[]>(MOCK_SHORT_SHOTS);
@@ -221,7 +222,7 @@ const Index = () => {
                     onInsertShot={handleInsertShot}
                     onAddShot={handleAddShot}
                     credits={credits}
-                    onExport={() => exportScriptDocument(shots)}
+                    onPreview={() => setShowPreview(true)}
                     onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
                   />
                 </div>
@@ -237,7 +238,7 @@ const Index = () => {
                 onInsertShot={handleInsertShot}
                 onAddShot={handleAddShot}
                 credits={credits}
-                onExport={() => exportScriptDocument(shots)}
+                onPreview={() => setShowPreview(true)}
                 onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
               />
             )}
@@ -271,6 +272,12 @@ const Index = () => {
       <AudioLibraryPanel
         visible={showAudioLib}
         onClose={() => setShowAudioLib(false)}
+      />
+
+      <ScriptPreviewSidebar
+        visible={showPreview}
+        shots={shots}
+        onClose={() => setShowPreview(false)}
       />
     </div>
   );

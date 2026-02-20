@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { StoryboardCard, type Shot } from './StoryboardCard';
-import { FileDown, Clapperboard, Plus } from 'lucide-react';
+import { Clapperboard, Plus, Eye } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import {
   DndContext,
@@ -26,11 +26,11 @@ interface StoryboardPanelProps {
   onInsertShot: (afterId: number) => void;
   onAddShot: () => void;
   credits: number;
-  onExport: () => void;
+  onPreview: () => void;
   onGenerateVideo: () => void;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onExport, onGenerateVideo }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo }: StoryboardPanelProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -82,11 +82,11 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
         style={{ animationDelay: `${shots.length * 100 + 200}ms`, animationFillMode: 'both' }}
       >
         <button
-          onClick={() => { playClick(); onExport(); }}
+          onClick={() => { playClick(); onPreview(); }}
           className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm text-foreground hover:bg-secondary transition-all duration-300"
         >
-          <FileDown size={14} strokeWidth={1.5} />
-          导出脚本文档
+          <Eye size={14} strokeWidth={1.5} />
+          预览 & 导出
         </button>
         <button
           onClick={() => { playClick(); onGenerateVideo(); }}
