@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { StoryboardCard, type Shot } from './StoryboardCard';
 import { EmotionCurveChart } from './EmotionCurveChart';
-import { Clapperboard, Plus, Eye } from 'lucide-react';
+import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock } from 'lucide-react';
 import { playClick } from '@/utils/audio';
+import { supabase } from '@/integrations/supabase/client';
 import {
   DndContext,
   closestCenter,
@@ -28,6 +29,18 @@ const VIDEO_RATIOS = [
   { id: '3:4', label: '3:4', desc: '竖版' },
 ];
 
+function parseDurationSeconds(dur: string): number {
+  const match = dur.match(/(\d+(?:\.\d+)?)/);
+  return match ? parseFloat(match[1]) : 5;
+}
+
+function formatTotalDuration(totalSec: number): string {
+  if (totalSec < 60) return `${Math.round(totalSec)}秒`;
+  const min = Math.floor(totalSec / 60);
+  const sec = Math.round(totalSec % 60);
+  return sec > 0 ? `${min}分${sec}秒` : `${min}分钟`;
+}
+
 interface StoryboardPanelProps {
   shots: Shot[];
   onUpdateShot: (id: number, field: keyof Shot, value: string) => void;
@@ -38,11 +51,47 @@ interface StoryboardPanelProps {
   credits: number;
   onPreview: () => void;
   onGenerateVideo: (ratio?: string) => void;
+  title?: string;
+  onTitleChange?: (title: string) => void;
+  inspiration?: string;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, title, onTitleChange, inspiration }: StoryboardPanelProps) {
   const [activeDragId, setActiveDragId] = useState<number | null>(null);
   const [selectedRatio, setSelectedRatio] = useState('16:9');
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+
+  const totalDuration = useMemo(() => {
+    const totalSec = shots.reduce((sum, s) => sum + parseDurationSeconds(s.duration), 0);
+    return formatTotalDuration(totalSec);
+  }, [shots]);
+
+  const handleGenerateTitle = async () => {
+    if (!inspiration && shots.length === 0) return;
+    playClick();
+    setIsGeneratingTitle(true);
+    try {
+      const context = shots.slice(0, 3).map(s => s.visual).filter(Boolean).join('；');
+      const { data, error } = await supabase.functions.invoke('generate-dialogue', {
+        body: {
+          visual: context || inspiration || '',
+          shotType: '标题',
+          character: '',
+          duration: '',
+          mode: 'narration',
+          customPrompt: `请为以下视频脚本生成一个简短有力的中文标题（不超过15字，不加引号不加标点）：\n灵感：${inspiration}\n内容：${context}`,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.text && onTitleChange) {
+        onTitleChange(data.text.replace(/["""''《》]/g, '').trim().slice(0, 20));
+      }
+    } catch (e: any) {
+      console.error('Title generation error:', e);
+    } finally {
+      setIsGeneratingTitle(false);
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -69,10 +118,42 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
 
   return (
     <div className="w-full max-w-3xl mx-auto animate-fade-in">
+      {/* Editable Title */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3">
+          <input
+            value={title || ''}
+            onChange={(e) => onTitleChange?.(e.target.value)}
+            placeholder="为你的视频脚本命名…"
+            className="flex-1 text-xl font-serif-cn font-semibold text-foreground bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none py-1 transition-colors placeholder:text-muted-foreground/40"
+          />
+          <button
+            onClick={handleGenerateTitle}
+            disabled={isGeneratingTitle}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-primary hover:bg-primary/5 transition-all duration-300 disabled:opacity-30"
+            title="AI 生成标题"
+          >
+            {isGeneratingTitle ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} strokeWidth={2} />}
+            AI标题
+          </button>
+        </div>
+        {inspiration && (
+          <p className="text-xs text-muted-foreground/50 mt-2 leading-relaxed">
+            <span className="text-muted-foreground/30 mr-1">灵感指令：</span>{inspiration}
+          </p>
+        )}
+      </div>
+
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-serif-cn text-foreground mb-1">沉浸式分镜操作板</h2>
-          <p className="text-xs text-muted-foreground">所有字段均可直接编辑 · 拖拽手柄调整顺序</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">所有字段均可直接编辑 · 拖拽手柄调整顺序</p>
+            <span className="inline-flex items-center gap-1 text-xs text-primary/70 bg-primary/5 px-2 py-0.5 rounded-full">
+              <Clock size={10} strokeWidth={2} />
+              预估 {totalDuration}
+            </span>
+          </div>
         </div>
         <button
           onClick={() => { playClick(); onAddShot(); }}
@@ -85,7 +166,7 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
       </div>
 
       {/* Emotion Curve Chart */}
-      <EmotionCurveChart shots={shots} />
+      <EmotionCurveChart shots={shots} onReorderShots={onReorderShots} />
 
       <DndContext
         sensors={sensors}
