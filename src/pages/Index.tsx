@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { AppSidebar } from '@/components/AppSidebar';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -25,25 +25,7 @@ const MOCK_SHORT_SHOTS: Shot[] = [
   { id: 4, shotNumber: '04', shotType: '远景', visual: '行者的背影渐行渐远，阳光从云层缝隙倾泻而下', duration: '6s', dialogue: '', audio: '弦乐缓缓渐入，如叹息般温柔', character: '', directorNote: '自然光是最好的演员。等待真实的丁达尔光线' },
 ];
 
-const MOCK_TREE: TreeNode = {
-  id: 'root',
-  label: '第一幕 · 序章',
-  children: [
-    { id: 'act1-s1', label: '场景一 · 晨间山谷' },
-    { id: 'act1-s2', label: '场景二 · 林间小径' },
-    {
-      id: 'act2',
-      label: '第二幕 · 转折',
-      children: [
-        { id: 'act2-s1', label: '场景三 · 溪畔驻足' },
-        { id: 'act2-s2', label: '场景四 · 远方来信' },
-      ],
-    },
-    { id: 'act3', label: '第三幕 · 归途' },
-  ],
-};
-
-/** Renumber tree labels after reorder (幕 and 场景 sequences) */
+/** Renumber tree labels after reorder */
 function renumberTree(node: TreeNode): TreeNode {
   if (!node.children) return node;
   const children = node.children.map((child, i) => {
@@ -61,6 +43,18 @@ function renumberTree(node: TreeNode): TreeNode {
   return { ...node, children };
 }
 
+/** Get all leaf node ids from tree */
+function getLeafIds(node: TreeNode): string[] {
+  if (!node.children || node.children.length === 0) return [node.id];
+  return node.children.flatMap(getLeafIds);
+}
+
+/** Get first leaf id */
+function getFirstLeafId(node: TreeNode): string | null {
+  if (!node.children || node.children.length === 0) return node.id;
+  return getFirstLeafId(node.children[0]);
+}
+
 type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
@@ -73,8 +67,25 @@ const Index = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [durationType, setDurationType] = useState<'short' | 'long'>('short');
   const [shots, setShots] = useState<Shot[]>(MOCK_SHORT_SHOTS);
-  const [activeTreeNode, setActiveTreeNode] = useState<string | null>('act1-s1');
-  const [scriptTree, setScriptTree] = useState<TreeNode>(MOCK_TREE);
+  const [activeTreeNode, setActiveTreeNode] = useState<string | null>(null);
+  const [scriptTree, setScriptTree] = useState<TreeNode>({ id: 'root', label: '总纲', children: [] });
+  const [sceneShotsMap, setSceneShotsMap] = useState<Record<string, Shot[]>>({});
+  const [videoGenerating, setVideoGenerating] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // For long-form mode: sync shots from sceneShotsMap when activeTreeNode changes
+  useEffect(() => {
+    if (durationType === 'long' && activeTreeNode && sceneShotsMap[activeTreeNode]) {
+      setShots(sceneShotsMap[activeTreeNode]);
+    }
+  }, [activeTreeNode, durationType, sceneShotsMap]);
+
+  // For long-form: persist shot edits back to sceneShotsMap
+  const syncShotsToMap = useCallback((updatedShots: Shot[]) => {
+    if (durationType === 'long' && activeTreeNode) {
+      setSceneShotsMap(prev => ({ ...prev, [activeTreeNode]: updatedShots }));
+    }
+  }, [durationType, activeTreeNode]);
 
   const handleGenerate = useCallback(async (inspiration: string, duration: 'short' | 'long', mood: string) => {
     setDurationType(duration);
@@ -85,19 +96,48 @@ const Index = () => {
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      if (data?.shots && Array.isArray(data.shots)) {
-        const parsed: Shot[] = data.shots.map((s: any, i: number) => ({
-          id: nextShotId++,
-          shotNumber: String(i + 1).padStart(2, '0'),
-          shotType: s.shotType || '中景',
-          visual: s.visual || '',
-          duration: s.duration || '5s',
-          dialogue: s.dialogue || '',
-          audio: s.audio || '',
-          character: s.character || '',
-          directorNote: s.directorNote || '',
-        }));
-        setShots(parsed);
+
+      if (duration === 'long') {
+        // Long-form: parse tree + sceneShotsMap
+        if (data?.tree && data?.sceneShotsMap) {
+          setScriptTree(data.tree);
+          const parsedMap: Record<string, Shot[]> = {};
+          for (const [sceneId, rawShots] of Object.entries(data.sceneShotsMap)) {
+            parsedMap[sceneId] = (rawShots as any[]).map((s: any, i: number) => ({
+              id: nextShotId++,
+              shotNumber: String(i + 1).padStart(2, '0'),
+              shotType: s.shotType || '中景',
+              visual: s.visual || '',
+              duration: s.duration || '5s',
+              dialogue: s.dialogue || '',
+              audio: s.audio || '',
+              character: s.character || '',
+              directorNote: s.directorNote || '',
+            }));
+          }
+          setSceneShotsMap(parsedMap);
+          const firstLeaf = getFirstLeafId(data.tree);
+          setActiveTreeNode(firstLeaf);
+          if (firstLeaf && parsedMap[firstLeaf]) {
+            setShots(parsedMap[firstLeaf]);
+          }
+        }
+      } else {
+        // Short-form
+        if (data?.shots && Array.isArray(data.shots)) {
+          const parsed: Shot[] = data.shots.map((s: any, i: number) => ({
+            id: nextShotId++,
+            shotNumber: String(i + 1).padStart(2, '0'),
+            shotType: s.shotType || '中景',
+            visual: s.visual || '',
+            duration: s.duration || '5s',
+            dialogue: s.dialogue || '',
+            audio: s.audio || '',
+            character: s.character || '',
+            directorNote: s.directorNote || '',
+          }));
+          setShots(parsed);
+        }
       }
       setPhase('style');
     } catch (e: any) {
@@ -113,8 +153,18 @@ const Index = () => {
   }, []);
 
   const handleUpdateShot = useCallback((id: number, field: keyof Shot, value: string) => {
-    setShots((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-  }, []);
+    setShots((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, [field]: value } : s));
+      return updated;
+    });
+    // Also sync to map for long-form
+    if (durationType === 'long' && activeTreeNode) {
+      setSceneShotsMap(prev => {
+        const current = prev[activeTreeNode] || [];
+        return { ...prev, [activeTreeNode]: current.map(s => s.id === id ? { ...s, [field]: value } : s) };
+      });
+    }
+  }, [durationType, activeTreeNode]);
 
   const handleReorderShots = useCallback((activeId: number, overId: number) => {
     setShots((prev) => {
@@ -124,14 +174,16 @@ const Index = () => {
       const next = [...prev];
       const [moved] = next.splice(oldIndex, 1);
       next.splice(newIndex, 0, moved);
-      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+      const renumbered = next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+      return renumbered;
     });
   }, []);
 
   const handleDeleteShot = useCallback((id: number) => {
     setShots((prev) => {
       const next = prev.filter((s) => s.id !== id);
-      return next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+      const renumbered = next.map((s, i) => ({ ...s, shotNumber: String(i + 1).padStart(2, '0') }));
+      return renumbered;
     });
   }, []);
 
@@ -173,6 +225,21 @@ const Index = () => {
     });
   }, []);
 
+  // After shots change in long-form mode, sync back
+  useEffect(() => {
+    if (durationType === 'long' && activeTreeNode) {
+      syncShotsToMap(shots);
+    }
+  }, [shots, durationType, activeTreeNode, syncShotsToMap]);
+
+  const handleTreeNodeSelect = useCallback((id: string) => {
+    // Only select leaf nodes (scenes), not act nodes
+    const leaves = getLeafIds(scriptTree);
+    if (leaves.includes(id)) {
+      setActiveTreeNode(id);
+    }
+  }, [scriptTree]);
+
   const handleTreeReorder = useCallback((parentId: string, activeId: string, overId: string) => {
     const reorderChildren = (node: TreeNode): TreeNode => {
       if (node.id === parentId && node.children) {
@@ -193,12 +260,85 @@ const Index = () => {
     setScriptTree(prev => renumberTree(reorderChildren(prev)));
   }, []);
 
+  const handleGenerateVideo = useCallback(async () => {
+    if (videoGenerating) return;
+    setVideoGenerating(true);
+
+    // Build a combined prompt from all shots
+    const allShots = durationType === 'long'
+      ? Object.values(sceneShotsMap).flat()
+      : shots;
+
+    const prompt = allShots.map((s, i) =>
+      `镜头${i + 1}(${s.shotType}): ${s.visual}${s.dialogue ? ` 台词：${s.dialogue}` : ''}`
+    ).join('；');
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-video', {
+        body: { action: 'submit', prompt },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      const taskId = data?.taskId;
+      if (!taskId) throw new Error('未获取到视频任务ID');
+
+      toast.info('视频生成任务已提交，预计需要2-5分钟...');
+      setCredits((c) => Math.max(0, c - 5));
+
+      // Start polling
+      pollRef.current = setInterval(async () => {
+        try {
+          const { data: pollData, error: pollError } = await supabase.functions.invoke('generate-video', {
+            body: { action: 'poll', taskId },
+          });
+          if (pollError || pollData?.error) {
+            console.error('Poll error:', pollError || pollData?.error);
+            return;
+          }
+          if (pollData?.status === 'SUCCESS' && pollData?.videoUrl) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setVideoGenerating(false);
+            toast.success('视频生成完成！');
+            window.open(pollData.videoUrl, '_blank');
+          } else if (pollData?.status === 'FAIL') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setVideoGenerating(false);
+            toast.error('视频生成失败，请重试');
+          }
+        } catch {
+          // ignore transient poll errors
+        }
+      }, 10000);
+    } catch (e: any) {
+      console.error('Video generation error:', e);
+      toast.error(e.message || '视频生成失败');
+      setVideoGenerating(false);
+    }
+  }, [shots, sceneShotsMap, durationType, videoGenerating]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
   const handleNewProject = () => {
     setActiveTab('new');
     setPhase('input');
     setShots(MOCK_SHORT_SHOTS);
-    setScriptTree(MOCK_TREE);
+    setScriptTree({ id: 'root', label: '总纲', children: [] });
+    setSceneShotsMap({});
+    setActiveTreeNode(null);
   };
+
+  // Get all shots for preview (long-form: all scenes combined)
+  const allShotsForPreview = durationType === 'long'
+    ? Object.values(sceneShotsMap).flat()
+    : shots;
 
   return (
     <div className="flex min-h-screen w-full">
@@ -234,7 +374,7 @@ const Index = () => {
                   <DraggableScriptTree
                     tree={scriptTree}
                     activeId={activeTreeNode}
-                    onSelect={setActiveTreeNode}
+                    onSelect={handleTreeNodeSelect}
                     onReorder={handleTreeReorder}
                   />
                 </div>
@@ -248,7 +388,7 @@ const Index = () => {
                     onAddShot={handleAddShot}
                     credits={credits}
                     onPreview={() => setShowPreview(true)}
-                    onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
+                    onGenerateVideo={handleGenerateVideo}
                   />
                 </div>
               </div>
@@ -264,7 +404,7 @@ const Index = () => {
                 onAddShot={handleAddShot}
                 credits={credits}
                 onPreview={() => setShowPreview(true)}
-                onGenerateVideo={() => setCredits((c) => Math.max(0, c - 5))}
+                onGenerateVideo={handleGenerateVideo}
               />
             )}
           </div>
@@ -301,7 +441,7 @@ const Index = () => {
 
       <ScriptPreviewSidebar
         visible={showPreview}
-        shots={shots}
+        shots={allShotsForPreview}
         onClose={() => setShowPreview(false)}
       />
     </div>
