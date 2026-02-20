@@ -86,7 +86,7 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
           className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm text-foreground hover:bg-secondary transition-all duration-300"
         >
           <FileDown size={14} strokeWidth={1.5} />
-          导出剧本文档
+          导出脚本文档
         </button>
         <button
           onClick={() => { playClick(); onGenerateVideo(); }}

@@ -152,7 +152,7 @@ export function DraggableScriptTree({ tree, activeId, onSelect, onReorder }: Dra
 
   return (
     <div>
-      <p className="text-xs text-muted-foreground/50 mb-4 uppercase tracking-widest">剧本结构</p>
+      <p className="text-xs text-muted-foreground/50 mb-4 uppercase tracking-widest">脚本结构</p>
       {renderGroup(tree, 0)}
     </div>
   );
