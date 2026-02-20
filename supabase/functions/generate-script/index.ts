@@ -127,9 +127,10 @@ serve(async (req) => {
 
 要求：
 - 生成2-3个幕，每幕2-3个场景
-- 每个场景包含3-5个分镜
+- 【极其重要】每个场景必须包含至少5个分镜，推荐5-8个。绝对不允许出现空场景或少于5个分镜的场景！
 - 每个场景的id必须与tree中对应节点的id一致
 - sceneShotsMap中的key必须是叶子节点（场景节点）的id
+- sceneShotsMap中每个key对应的数组长度必须 >= 5
 - 幕节点不需要在sceneShotsMap中
 - shotType可选：大远景/远景/全景/中景/近景/特写/大特写
 - visual不超过50字，要有画面感
@@ -215,7 +216,48 @@ ${moodHint}${ragSection}
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({ tree: parsed.tree, sceneShotsMap: parsed.sceneShotsMap, ragUsed: !!ragContext }), {
+
+      // Validate: every scene must have ≥ 5 shots; pad with placeholder shots if needed
+      const ssm = parsed.sceneShotsMap as Record<string, any[]>;
+      for (const sceneId of Object.keys(ssm)) {
+        if (!Array.isArray(ssm[sceneId])) ssm[sceneId] = [];
+        while (ssm[sceneId].length < 5) {
+          const idx = ssm[sceneId].length;
+          ssm[sceneId].push({
+            shotType: ['中景', '近景', '特写', '全景', '远景'][idx % 5],
+            visual: `（待补充第${idx + 1}个分镜画面）`,
+            duration: '5s',
+            dialogue: '',
+            audio: '环境音',
+            character: '',
+            directorNote: '请补充此分镜的导演指示',
+            emotionIntensity: 40 + idx * 5,
+          });
+        }
+      }
+
+      // Also ensure every leaf node in the tree has an entry in sceneShotsMap
+      const ensureLeaves = (node: any) => {
+        if (!node.children || node.children.length === 0) {
+          if (!ssm[node.id]) {
+            ssm[node.id] = Array.from({ length: 5 }, (_, i) => ({
+              shotType: ['大远景', '中景', '近景', '特写', '全景'][i % 5],
+              visual: `（待补充第${i + 1}个分镜画面）`,
+              duration: '5s',
+              dialogue: '',
+              audio: '环境音',
+              character: '',
+              directorNote: '请补充此分镜的导演指示',
+              emotionIntensity: 30 + i * 10,
+            }));
+          }
+          return;
+        }
+        for (const child of node.children) ensureLeaves(child);
+      };
+      ensureLeaves(parsed.tree);
+
+      return new Response(JSON.stringify({ tree: parsed.tree, sceneShotsMap: ssm, ragUsed: !!ragContext }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else {

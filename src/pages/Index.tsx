@@ -11,6 +11,7 @@ import { DraggableScriptTree, type TreeNode } from '@/components/DraggableScript
 import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
+import { VideoSequencePlayer, type VideoClip } from '@/components/VideoSequencePlayer';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
@@ -56,7 +57,9 @@ type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
   const { user } = useAuth();
-  const { videoJobs, addJob } = useVideoPolling();
+  const { videoJobs, addJob, startBatch, onBatchComplete } = useVideoPolling();
+  const [showSequencePlayer, setShowSequencePlayer] = useState(false);
+  const [sequenceClips, setSequenceClips] = useState<VideoClip[]>([]);
   const [activeTab, setActiveTab] = useState<'new' | 'history' | 'videos'>('new');
   const [phase, setPhase] = useState<Phase>('input');
   const [credits, setCredits] = useState(15);
@@ -74,6 +77,20 @@ const Index = () => {
   const [inspiration, setInspiration] = useState('');
   const [currentMood, setCurrentMood] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+
+  // Auto-open preview when a per-shot batch completes
+  useEffect(() => {
+    onBatchComplete.current = (completedJobs) => {
+      const clips: VideoClip[] = completedJobs.map((j, i) => ({
+        url: j.videoUrl!,
+        title: `镜头 ${i + 1} · ${j.prompt.slice(0, 30)}`,
+      }));
+      setSequenceClips(clips);
+      setShowSequencePlayer(true);
+      toast.success(`全部镜头已生成完成，正在播放拼接预览`);
+    };
+    return () => { onBatchComplete.current = null; };
+  }, [onBatchComplete]);
 
   // Sync shots from sceneShotsMap when activeTreeNode changes (smooth transition)
   useEffect(() => {
@@ -474,6 +491,7 @@ const Index = () => {
 
     toast.info(`开始逐镜生成 ${allShots.length} 个视频片段…`);
     let submitted = 0;
+    const batchJobIds: string[] = [];
 
     for (const [i, shot] of allShots.entries()) {
       // Build per-shot cinematic prompt
@@ -508,6 +526,7 @@ const Index = () => {
         const jobDbId = inserted?.id || taskId;
 
         addJob({ id: jobDbId, taskId, prompt: shotPrompt, status: 'processing', startedAt: Date.now() }, taskId);
+        batchJobIds.push(jobDbId);
         submitted++;
       } catch (e: any) {
         console.error(`Shot ${i + 1} video error:`, e);
@@ -516,10 +535,11 @@ const Index = () => {
     }
 
     if (submitted > 0) {
+      startBatch(batchJobIds);
       toast.success(`已提交 ${submitted}/${allShots.length} 个镜头的视频生成任务`);
       setCredits(c => Math.max(0, c - submitted * 5));
     }
-  }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob]);
+  }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob, startBatch]);
 
   const handleNewProject = () => {
     setActiveTab('new');
@@ -663,6 +683,12 @@ const Index = () => {
         scriptTree={scriptTree}
         sceneShotsMap={sceneShotsMap}
         durationType={durationType}
+      />
+
+      <VideoSequencePlayer
+        open={showSequencePlayer}
+        onOpenChange={setShowSequencePlayer}
+        clips={sequenceClips}
       />
     </div>
   );

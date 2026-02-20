@@ -3,10 +3,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { VideoJobTracker } from '@/components/VideoProgressPanel';
 
+interface BatchInfo {
+  jobIds: string[];
+  completedIds: Set<string>;
+}
+
 interface VideoPollingContextType {
   videoJobs: VideoJobTracker[];
   addJob: (job: VideoJobTracker, taskId: string) => void;
   dismissJob: (id: string) => void;
+  startBatch: (jobIds: string[]) => void;
+  onBatchComplete: React.MutableRefObject<((jobs: VideoJobTracker[]) => void) | null>;
 }
 
 const VideoPollingContext = createContext<VideoPollingContextType | undefined>(undefined);
@@ -14,9 +21,32 @@ const VideoPollingContext = createContext<VideoPollingContextType | undefined>(u
 export function VideoPollingProvider({ children }: { children: ReactNode }) {
   const [videoJobs, setVideoJobs] = useState<VideoJobTracker[]>([]);
   const pollRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const batchRef = useRef<BatchInfo | null>(null);
+  const onBatchComplete = useRef<((jobs: VideoJobTracker[]) => void) | null>(null);
+
+  const checkBatchCompletion = useCallback((jobs: VideoJobTracker[]) => {
+    const batch = batchRef.current;
+    if (!batch) return;
+    const done = batch.jobIds.every(id => {
+      const job = jobs.find(j => j.id === id);
+      return job && (job.status === 'success' || job.status === 'failed');
+    });
+    if (done) {
+      const batchJobs = batch.jobIds
+        .map(id => jobs.find(j => j.id === id)!)
+        .filter(j => j.status === 'success' && j.videoUrl);
+      batchRef.current = null;
+      if (batchJobs.length > 0 && onBatchComplete.current) {
+        onBatchComplete.current(batchJobs);
+      }
+    }
+  }, []);
 
   const addJob = useCallback((job: VideoJobTracker, taskId: string) => {
-    setVideoJobs(prev => [job, ...prev]);
+    setVideoJobs(prev => {
+      const next = [job, ...prev];
+      return next;
+    });
 
     pollRefs.current[job.id] = setInterval(async () => {
       try {
@@ -29,21 +59,33 @@ export function VideoPollingProvider({ children }: { children: ReactNode }) {
           await supabase.from('video_jobs').update({
             status: 'success', video_url: pollData.videoUrl, thumbnail_url: pollData.coverUrl || null,
           }).eq('id', job.id);
-          setVideoJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'success', videoUrl: pollData.videoUrl } : j));
+          setVideoJobs(prev => {
+            const next = prev.map(j => j.id === job.id ? { ...j, status: 'success' as const, videoUrl: pollData.videoUrl } : j);
+            setTimeout(() => checkBatchCompletion(next), 0);
+            return next;
+          });
           toast.success('视频生成完成！');
         } else if (pollData?.status === 'FAIL') {
           clearInterval(pollRefs.current[job.id]);
           delete pollRefs.current[job.id];
           await supabase.from('video_jobs').update({ status: 'failed' }).eq('id', job.id);
-          setVideoJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'failed' } : j));
+          setVideoJobs(prev => {
+            const next = prev.map(j => j.id === job.id ? { ...j, status: 'failed' as const } : j);
+            setTimeout(() => checkBatchCompletion(next), 0);
+            return next;
+          });
           toast.error('视频生成失败');
         }
       } catch { /* ignore */ }
     }, 10000);
-  }, []);
+  }, [checkBatchCompletion]);
 
   const dismissJob = useCallback((id: string) => {
     setVideoJobs(prev => prev.filter(j => j.id !== id));
+  }, []);
+
+  const startBatch = useCallback((jobIds: string[]) => {
+    batchRef.current = { jobIds, completedIds: new Set() };
   }, []);
 
   // Resume polling for processing jobs on mount
@@ -84,7 +126,7 @@ export function VideoPollingProvider({ children }: { children: ReactNode }) {
   }, [videoJobs]);
 
   return (
-    <VideoPollingContext.Provider value={{ videoJobs, addJob, dismissJob }}>
+    <VideoPollingContext.Provider value={{ videoJobs, addJob, dismissJob, startBatch, onBatchComplete }}>
       {children}
     </VideoPollingContext.Provider>
   );
