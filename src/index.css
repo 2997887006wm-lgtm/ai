@@ -206,4 +206,30 @@
   .capsule-option-inactive {
     @apply text-muted-foreground hover:text-foreground;
   }
+
+  /* High contrast mode for accessibility */
+  .high-contrast-mode {
+    --foreground: 0 0% 0%;
+    --muted-foreground: 0 0% 25%;
+    --border: 0 0% 40%;
+  }
+
+  .dark .high-contrast-mode {
+    --foreground: 0 0% 100%;
+    --muted-foreground: 0 0% 80%;
+    --border: 0 0% 60%;
+  }
+
+  /* Screen reader only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
 }

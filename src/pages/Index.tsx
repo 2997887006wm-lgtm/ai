@@ -22,10 +22,10 @@ let nextShotId = 100;
 const CN_NUMBERS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 
 const MOCK_SHORT_SHOTS: Shot[] = [
-  { id: 1, shotNumber: '01', shotType: '大远景', visual: '晨雾弥漫的山谷，一条蜿蜒小路隐入远方的松林', duration: '8s', dialogue: '', audio: '远处鸟鸣，风穿过松针的沙沙声', character: '', directorNote: '以缓慢推进开场，建立孤独而宁静的情绪基底' },
-  { id: 2, shotNumber: '02', shotType: '中景', visual: '一双旧布鞋踩过露湿的碎石路，步伐从容', duration: '5s', dialogue: '', audio: '碎石轻响，布料摩擦', character: '行者 — 年约四十，面容平静', directorNote: '不露面容，仅以脚步暗示人物性格' },
-  { id: 3, shotNumber: '03', shotType: '特写', visual: '手指轻触路旁一株野花，露珠滑落', duration: '4s', dialogue: '（旁白）有些路，走过便是全部的意义。', audio: '水滴落入溪面的轻微声响', character: '', directorNote: '这是情感锚点，画面节奏在此凝滞片刻' },
-  { id: 4, shotNumber: '04', shotType: '远景', visual: '行者的背影渐行渐远，阳光从云层缝隙倾泻而下', duration: '6s', dialogue: '', audio: '弦乐缓缓渐入，如叹息般温柔', character: '', directorNote: '自然光是最好的演员。等待真实的丁达尔光线' },
+  { id: 1, shotNumber: '01', shotType: '大远景', visual: '晨雾弥漫的山谷，一条蜿蜒小路隐入远方的松林', duration: '8s', dialogue: '', audio: '远处鸟鸣，风穿过松针的沙沙声', character: '', directorNote: '以缓慢推进开场，建立孤独而宁静的情绪基底', emotionIntensity: 25 },
+  { id: 2, shotNumber: '02', shotType: '中景', visual: '一双旧布鞋踩过露湿的碎石路，步伐从容', duration: '5s', dialogue: '', audio: '碎石轻响，布料摩擦', character: '行者 — 年约四十，面容平静', directorNote: '不露面容，仅以脚步暗示人物性格', emotionIntensity: 35 },
+  { id: 3, shotNumber: '03', shotType: '特写', visual: '手指轻触路旁一株野花，露珠滑落', duration: '4s', dialogue: '（旁白）有些路，走过便是全部的意义。', audio: '水滴落入溪面的轻微声响', character: '', directorNote: '这是情感锚点，画面节奏在此凝滞片刻', emotionIntensity: 70 },
+  { id: 4, shotNumber: '04', shotType: '远景', visual: '行者的背影渐行渐远，阳光从云层缝隙倾泻而下', duration: '6s', dialogue: '', audio: '弦乐缓缓渐入，如叹息般温柔', character: '', directorNote: '自然光是最好的演员。等待真实的丁达尔光线', emotionIntensity: 55 },
 ];
 
 /** Renumber tree labels after reorder */
@@ -133,6 +133,7 @@ const Index = () => {
               audio: s.audio || '',
               character: s.character || '',
               directorNote: s.directorNote || '',
+              emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
             }));
           }
           setSceneShotsMap(parsedMap);
@@ -154,6 +155,7 @@ const Index = () => {
             audio: s.audio || '',
             character: s.character || '',
             directorNote: s.directorNote || '',
+            emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
           }));
           setShots(parsed);
         }

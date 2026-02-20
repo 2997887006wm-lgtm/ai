@@ -18,6 +18,7 @@ interface Shot {
   character: string;
   directorNote: string;
   imageUrl?: string;
+  emotionIntensity?: number;
 }
 
 interface StoryboardCardProps {
