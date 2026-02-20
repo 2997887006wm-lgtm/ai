@@ -1,0 +1,55 @@
+import { StoryboardCard, type Shot } from './StoryboardCard';
+import { FileDown, Clapperboard } from 'lucide-react';
+import { playClick } from '@/utils/audio';
+
+interface StoryboardPanelProps {
+  shots: Shot[];
+  onUpdateShot: (id: number, field: keyof Shot, value: string) => void;
+  credits: number;
+  onExport: () => void;
+  onGenerateVideo: () => void;
+}
+
+export function StoryboardPanel({ shots, onUpdateShot, credits, onExport, onGenerateVideo }: StoryboardPanelProps) {
+  return (
+    <div className="w-full max-w-3xl mx-auto animate-fade-in">
+      <div className="mb-8">
+        <h2 className="text-lg font-serif-cn text-foreground mb-1">沉浸式分镜操作板</h2>
+        <p className="text-xs text-muted-foreground">所有字段均可直接编辑 — 此处皆可自由涂改</p>
+      </div>
+
+      <div className="flex flex-col gap-5">
+        {shots.map((shot, i) => (
+          <StoryboardCard
+            key={shot.id}
+            shot={shot}
+            index={i}
+            onUpdate={onUpdateShot}
+          />
+        ))}
+      </div>
+
+      {/* Export actions */}
+      <div
+        className="flex items-center justify-center gap-4 mt-10 pt-8 border-t border-border animate-fade-in"
+        style={{ animationDelay: `${shots.length * 100 + 200}ms`, animationFillMode: 'both' }}
+      >
+        <button
+          onClick={() => { playClick(); onExport(); }}
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm text-foreground hover:bg-secondary transition-all duration-300"
+        >
+          <FileDown size={14} strokeWidth={1.5} />
+          导出剧本文档
+        </button>
+        <button
+          onClick={() => { playClick(); onGenerateVideo(); }}
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm transition-all duration-300 hover:border-scarlet-glow hover:shadow-scarlet text-foreground"
+        >
+          <Clapperboard size={14} strokeWidth={1.5} className="text-scarlet" />
+          一键生成视频
+          <span className="text-[10px] text-muted-foreground ml-1">(5积点)</span>
+        </button>
+      </div>
+    </div>
+  );
+}
