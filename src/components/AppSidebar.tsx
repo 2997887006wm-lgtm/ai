@@ -1,4 +1,4 @@
-import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users } from 'lucide-react';
+import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users, UsersRound } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -9,10 +9,11 @@ interface AppSidebarProps {
   onHistory: () => void;
   onCreditsClick: () => void;
   onVideoLibrary?: () => void;
+  onTeam?: () => void;
   activeTab: 'new' | 'history' | 'videos';
 }
 
-export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, onVideoLibrary, activeTab }: AppSidebarProps) {
+export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, onVideoLibrary, onTeam, activeTab }: AppSidebarProps) {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
 
@@ -48,6 +49,15 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
 
       {/* Bottom: community + account + credits */}
       <div className="flex flex-col items-center gap-4">
+        {/* Team */}
+        <button
+          onClick={() => { playClick(); onTeam?.(); }}
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
+          title="团队协作"
+        >
+          <UsersRound size={18} strokeWidth={1.5} />
+        </button>
+
         {/* Community */}
         <button
           onClick={() => { playClick(); navigate('/community'); }}
