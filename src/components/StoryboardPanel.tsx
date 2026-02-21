@@ -291,7 +291,7 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
             aria-label="预览并导出脚本"
           >
             <Eye size={14} strokeWidth={1.5} />
-            预览 & 导出
+            预览 & 导出脚本
           </button>
           {onGenerateVideoPerShot && (
             <button
