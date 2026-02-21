@@ -6,6 +6,7 @@ import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
 import { VoiceOverButton } from './VoiceOverButton';
 import { ShotAudioPicker } from './ShotAudioPicker';
+import { ShotCommentButton } from './ShotCommentButton';
 
 interface Shot {
   id: number;
@@ -31,6 +32,7 @@ interface StoryboardCardProps {
   onInsertAfter: (id: number) => void;
   onGenerateShotVideo?: (shot: Shot) => void;
   isGeneratingVideo?: boolean;
+  scriptId?: string | null;
 }
 
 function InlineField({ label, value, onChange, multiline = false, highlight = false }: {
@@ -65,7 +67,7 @@ function InlineField({ label, value, onChange, multiline = false, highlight = fa
   );
 }
 
-export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter, onGenerateShotVideo, isGeneratingVideo }: StoryboardCardProps) {
+export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter, onGenerateShotVideo, isGeneratingVideo, scriptId }: StoryboardCardProps) {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingDialogue, setIsGeneratingDialogue] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(shot.imageUrl || null);
@@ -178,13 +180,16 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
             highlight
           />
           <div className="flex-1" />
-          <button
-            onClick={() => { playClick(); onDelete(shot.id); }}
-            className="opacity-0 group-hover/card:opacity-100 text-muted-foreground/30 hover:text-destructive transition-all duration-300 p-1.5 rounded-lg hover:bg-destructive/5"
-            title="删除此分镜"
-          >
-            <Trash2 size={14} strokeWidth={1.5} />
-          </button>
+          <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition-all duration-300">
+            <ShotCommentButton scriptId={scriptId || null} shotId={shot.id} />
+            <button
+              onClick={() => { playClick(); onDelete(shot.id); }}
+              className="text-muted-foreground/30 hover:text-destructive p-1.5 rounded-lg hover:bg-destructive/5 transition-colors"
+              title="删除此分镜"
+            >
+              <Trash2 size={14} strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
 
         {/* Generated image */}
