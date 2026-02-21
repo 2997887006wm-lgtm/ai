@@ -736,12 +736,6 @@ const Index = () => {
                   {/* Collaboration presence bar */}
                   <div className="flex items-center justify-end mb-3 gap-2">
                     <CollaborationPresence scriptId={currentScriptId} />
-                    <button
-                      onClick={() => setShowComments(true)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
-                    >
-                      💬 评论
-                    </button>
                   </div>
                   <StoryboardPanel
                     shots={shots}
@@ -759,6 +753,7 @@ const Index = () => {
                     onTitleChange={setScriptTitle}
                     inspiration={inspiration}
                     onCopyright={() => setShowCopyright(true)}
+                    scriptId={currentScriptId}
                   />
                 </div>
               </div>
@@ -769,12 +764,6 @@ const Index = () => {
                 {/* Collaboration presence bar */}
                 <div className="flex items-center justify-end mb-3 gap-2 max-w-3xl mx-auto">
                   <CollaborationPresence scriptId={currentScriptId} />
-                  <button
-                    onClick={() => setShowComments(true)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
-                  >
-                    💬 评论
-                  </button>
                 </div>
                 <StoryboardPanel
                   shots={shots}
@@ -792,6 +781,7 @@ const Index = () => {
                   onTitleChange={setScriptTitle}
                   inspiration={inspiration}
                   onCopyright={() => setShowCopyright(true)}
+                  scriptId={currentScriptId}
                 />
               </div>
             )}

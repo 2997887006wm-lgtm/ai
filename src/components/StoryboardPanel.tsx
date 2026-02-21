@@ -58,9 +58,10 @@ interface StoryboardPanelProps {
   onTitleChange?: (title: string) => void;
   inspiration?: string;
   onCopyright?: () => void;
+  scriptId?: string | null;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateShotVideo, generatingVideoShotIds = [], title, onTitleChange, inspiration, onCopyright }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateShotVideo, generatingVideoShotIds = [], title, onTitleChange, inspiration, onCopyright, scriptId }: StoryboardPanelProps) {
   const [activeDragId, setActiveDragId] = useState<number | null>(null);
   const [selectedRatio, setSelectedRatio] = useState('16:9');
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
@@ -245,6 +246,7 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
                 onInsertAfter={onInsertShot}
                 onGenerateShotVideo={onGenerateShotVideo ? (s) => onGenerateShotVideo(s, selectedRatio) : undefined}
                 isGeneratingVideo={generatingVideoShotIds.includes(shot.id)}
+                scriptId={scriptId}
               />
             ))}
           </div>
