@@ -653,6 +653,16 @@ const Index = () => {
     }
   }, [videoJobs, user, addJob]);
 
+  const handleLoadTemplate = useCallback((templateShots: Shot[], title: string, duration: 'short' | 'long', mood: string) => {
+    setShots(templateShots);
+    setScriptTitle(title);
+    setDurationType(duration);
+    setCurrentMood(mood);
+    setPhase('storyboard');
+    setCurrentScriptId(null);
+    toast.success('已加载分镜模版，可直接编辑');
+  }, []);
+
 
   const handleNewProject = () => {
     setActiveTab('new');
@@ -706,16 +716,18 @@ const Index = () => {
                 onGenerate={handleGenerate}
                 onCancel={handleCancelGenerate}
                 isGenerating={isGenerating}
+                onLoadShots={handleLoadTemplate}
               />
             )}
 
             {phase === 'input' && isGenerating && (
               <div className="max-w-3xl mx-auto">
-                <InspirationInput
-                  onGenerate={handleGenerate}
-                  onCancel={handleCancelGenerate}
-                  isGenerating={isGenerating}
-                />
+              <InspirationInput
+                onGenerate={handleGenerate}
+                onCancel={handleCancelGenerate}
+                isGenerating={isGenerating}
+                onLoadShots={handleLoadTemplate}
+              />
                 <div className="mt-8">
                   <StreamingGenerationOverlay visible={true} streamText={streamText} />
                 </div>
