@@ -199,16 +199,56 @@ export function exportAsLrc(shots: Shot[]) {
 
   shots.forEach((shot) => {
     const tag = formatLrcTime(accumulatedMs);
-    // Use dialogue if available, otherwise use visual description
     const text = shot.dialogue || shot.visual;
     lines.push(`${tag}${text}`);
-
-    // Parse duration to milliseconds for next timestamp
     const durationSec = parseDurationToSeconds(shot.duration);
     accumulatedMs += durationSec * 1000;
   });
 
   download(lines.join('\n'), 'text/plain;charset=utf-8', `脚本文档_${dateSuffix()}.lrc`);
+}
+
+/* ── Fountain (.fountain) ────────────────────── */
+
+export function exportAsFountain(shots: Shot[]) {
+  const lines: string[] = [];
+  lines.push('Title: 脚本文档');
+  lines.push(`Date: ${new Date().toLocaleDateString('zh-CN')}`);
+  lines.push('');
+  lines.push('===');
+  lines.push('');
+
+  shots.forEach((shot) => {
+    // Scene heading (forced with .)
+    lines.push(`.INT. 分镜 ${shot.shotNumber} — ${shot.shotType} (${shot.duration})`);
+    lines.push('');
+
+    // Action / visual description
+    lines.push(shot.visual);
+    lines.push('');
+
+    // Character + dialogue
+    if (shot.dialogue) {
+      const charName = (shot.character || '旁白').toUpperCase();
+      lines.push(charName);
+      if (shot.audio) {
+        lines.push(`(${shot.audio})`);
+      }
+      lines.push(shot.dialogue);
+      lines.push('');
+    } else if (shot.audio) {
+      lines.push(`> 音效: ${shot.audio} <`);
+      lines.push('');
+    }
+
+    // Director note as Fountain note
+    if (shot.directorNote) {
+      lines.push(`[[${shot.directorNote}]]`);
+      lines.push('');
+    }
+  });
+
+  download(lines.join('\n'), 'text/plain;charset=utf-8', `脚本文档_${dateSuffix()}.fountain`);
 }
 
 function formatLrcTime(ms: number): string {

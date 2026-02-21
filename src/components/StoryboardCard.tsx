@@ -20,6 +20,7 @@ interface Shot {
   imageUrl?: string;
   emotionIntensity?: number;
   dialogueSuggestion?: string;
+  transition?: string;
 }
 
 interface StoryboardCardProps {
@@ -144,6 +145,15 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
         style={style}
         className="rounded-xl border border-border bg-card p-6 shadow-soft hover:shadow-card transition-all duration-500 animate-fade-in-up relative"
       >
+        {/* Transition badge */}
+        {shot.transition && (
+          <div className="flex justify-center mb-3">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary/70 border border-primary/15">
+              ↓ {shot.transition}
+            </span>
+          </div>
+        )}
+
         {/* Header row */}
         <div className="flex items-center gap-4 mb-5">
           <button
