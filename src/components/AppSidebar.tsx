@@ -1,4 +1,4 @@
-import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users, UsersRound } from 'lucide-react';
+import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users, Handshake, Globe } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -24,10 +24,10 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
   ];
 
   return (
-    <aside className="w-16 min-h-screen bg-charcoal flex flex-col items-center py-6 justify-between border-r border-charcoal-lighter/50 shrink-0">
+    <aside className="w-[72px] min-h-screen bg-charcoal flex flex-col items-center py-6 justify-between border-r border-charcoal-lighter/50 shrink-0">
       {/* Top nav */}
-      <nav className="flex flex-col items-center gap-6">
-        <div className="w-8 h-8 rounded-full bg-charcoal-lighter flex items-center justify-center mb-4">
+      <nav className="flex flex-col items-center gap-5">
+        <div className="w-8 h-8 rounded-full bg-charcoal-lighter flex items-center justify-center mb-3">
           <span className="font-serif text-xs text-scarlet-light font-semibold">墨</span>
         </div>
 
@@ -35,36 +35,39 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
           <button
             key={id}
             onClick={() => { playClick(); onClick(); }}
-            className={`group relative w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300 ${
+            className={`group relative flex flex-col items-center gap-1 w-14 py-1.5 rounded-lg transition-all duration-300 ${
               activeTab === id
                 ? 'bg-charcoal-lighter text-sidebar-accent-foreground'
                 : 'text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light'
             }`}
             title={title}
           >
-            <Icon size={18} strokeWidth={1.5} />
+            <Icon size={17} strokeWidth={1.5} />
+            <span className="text-[9px] leading-none">{title}</span>
           </button>
         ))}
       </nav>
 
-      {/* Bottom: community + account + credits */}
+      {/* Bottom: team + community + account + credits */}
       <div className="flex flex-col items-center gap-4">
         {/* Team */}
         <button
           onClick={() => { playClick(); onTeam?.(); }}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
+          className="flex flex-col items-center gap-1 w-14 py-1.5 rounded-lg text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
           title="团队协作"
         >
-          <UsersRound size={18} strokeWidth={1.5} />
+          <Handshake size={17} strokeWidth={1.5} />
+          <span className="text-[9px] leading-none">团队协作</span>
         </button>
 
         {/* Community */}
         <button
           onClick={() => { playClick(); navigate('/community'); }}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
+          className="flex flex-col items-center gap-1 w-14 py-1.5 rounded-lg text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
           title="社区广场"
         >
-          <Users size={18} strokeWidth={1.5} />
+          <Globe size={17} strokeWidth={1.5} />
+          <span className="text-[9px] leading-none">社区广场</span>
         </button>
 
         {/* Credits */}
@@ -74,11 +77,11 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
           title="查看积点"
         >
           <Droplets
-            size={16}
+            size={15}
             strokeWidth={1.2}
             className="text-sidebar-foreground/30 group-hover:text-scarlet-light/50 transition-colors duration-500 animate-gentle-pulse"
           />
-          <span className="text-[10px] text-sidebar-foreground/25 group-hover:text-sidebar-foreground/50 transition-colors duration-500 font-sans tabular-nums tracking-wide">
+          <span className="text-[9px] text-sidebar-foreground/25 group-hover:text-sidebar-foreground/50 transition-colors duration-500 font-sans tabular-nums tracking-wide">
             {user ? (profile?.credits ?? credits) : credits}
           </span>
         </button>
@@ -86,18 +89,19 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
         {/* Account / Login */}
         <button
           onClick={() => { playClick(); navigate(user ? '/account' : '/auth'); }}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
+          className="flex flex-col items-center gap-1 w-14 py-1.5 rounded-lg text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
           title={user ? '我的账号' : '登录'}
         >
           {user ? (
             profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
             ) : (
-              <User size={18} strokeWidth={1.5} />
+              <User size={17} strokeWidth={1.5} />
             )
           ) : (
-            <LogIn size={18} strokeWidth={1.5} />
+            <LogIn size={17} strokeWidth={1.5} />
           )}
+          <span className="text-[9px] leading-none">{user ? '我的' : '登录'}</span>
         </button>
       </div>
     </aside>
