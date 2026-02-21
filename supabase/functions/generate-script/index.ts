@@ -178,7 +178,7 @@ ${moodHint}${ragSection}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'glm-4-flash',
+        model: 'glm-4.6v',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
