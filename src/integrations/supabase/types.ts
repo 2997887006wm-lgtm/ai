@@ -249,6 +249,51 @@ export type Database = {
           },
         ]
       }
+      script_templates: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          description: string
+          duration_type: string
+          emoji: string
+          id: string
+          is_official: boolean
+          mood: string
+          shots: Json
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          duration_type?: string
+          emoji?: string
+          id?: string
+          is_official?: boolean
+          mood?: string
+          shots?: Json
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          duration_type?: string
+          emoji?: string
+          id?: string
+          is_official?: boolean
+          mood?: string
+          shots?: Json
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       scripts: {
         Row: {
           created_at: string
