@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ScrollText, Loader2, Trash2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { ScrollText, Loader2, Trash2, Filter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -63,9 +63,44 @@ export function HistoryPanel({ onLoadScript }: HistoryPanelProps) {
     literary: '文艺', horror: '恐怖', romantic: '浪漫', epic: '史诗',
   };
 
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+
+  const availableMoods = useMemo(() => {
+    const moods = new Set<string>();
+    scripts.forEach(s => { if (s.mood) moods.add(s.mood); });
+    return Array.from(moods);
+  }, [scripts]);
+
+  const filteredScripts = useMemo(() => {
+    if (!selectedMood) return scripts;
+    return scripts.filter(s => s.mood === selectedMood);
+  }, [scripts, selectedMood]);
+
   return (
     <div className="w-full max-w-3xl mx-auto animate-fade-in">
-      <h2 className="text-lg font-serif-cn text-foreground mb-6">历史脚本</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-serif-cn text-foreground">历史脚本</h2>
+        {availableMoods.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Filter size={12} className="text-muted-foreground/40 mr-1" />
+            <button
+              onClick={() => setSelectedMood(null)}
+              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${!selectedMood ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-foreground/30'}`}
+            >
+              全部
+            </button>
+            {availableMoods.map(mood => (
+              <button
+                key={mood}
+                onClick={() => setSelectedMood(mood === selectedMood ? null : mood)}
+                className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${selectedMood === mood ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-foreground/30'}`}
+              >
+                {MOOD_MAP[mood] || mood}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -79,7 +114,7 @@ export function HistoryPanel({ onLoadScript }: HistoryPanelProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {scripts.map((item) => (
+          {filteredScripts.map((item) => (
             <button
               key={item.id}
               onClick={() => { playClick(); onLoadScript?.(item.id); }}

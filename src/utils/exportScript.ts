@@ -187,6 +187,43 @@ export function exportScriptDocument(shots: Shot[]) {
   download(lines.join('\n'), 'text/plain;charset=utf-8', `脚本文档_${dateSuffix()}.txt`);
 }
 
+/* ── LRC ─────────────────────────────────────── */
+
+export function exportAsLrc(shots: Shot[]) {
+  const lines: string[] = [];
+  lines.push('[ti:脚本文档]');
+  lines.push(`[by:导演工具]`);
+  lines.push('');
+
+  let accumulatedMs = 0;
+
+  shots.forEach((shot) => {
+    const tag = formatLrcTime(accumulatedMs);
+    // Use dialogue if available, otherwise use visual description
+    const text = shot.dialogue || shot.visual;
+    lines.push(`${tag}${text}`);
+
+    // Parse duration to milliseconds for next timestamp
+    const durationSec = parseDurationToSeconds(shot.duration);
+    accumulatedMs += durationSec * 1000;
+  });
+
+  download(lines.join('\n'), 'text/plain;charset=utf-8', `脚本文档_${dateSuffix()}.lrc`);
+}
+
+function formatLrcTime(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  const centisec = Math.floor((ms % 1000) / 10);
+  return `[${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(centisec).padStart(2, '0')}]`;
+}
+
+function parseDurationToSeconds(duration: string): number {
+  const match = duration.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 5;
+}
+
 /* ── Helpers ──────────────────────────────────── */
 
 function dateSuffix() {
