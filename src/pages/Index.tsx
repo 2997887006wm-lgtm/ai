@@ -711,26 +711,20 @@ const Index = () => {
               </div>
             )}
 
-            {phase === 'input' && !isGenerating && (
-              <InspirationInput
-                onGenerate={handleGenerate}
-                onCancel={handleCancelGenerate}
-                isGenerating={isGenerating}
-                onLoadShots={handleLoadTemplate}
-              />
-            )}
-
-            {phase === 'input' && isGenerating && (
-              <div className="max-w-3xl mx-auto">
-              <InspirationInput
-                onGenerate={handleGenerate}
-                onCancel={handleCancelGenerate}
-                isGenerating={isGenerating}
-                onLoadShots={handleLoadTemplate}
-              />
-                <div className="mt-8">
-                  <StreamingGenerationOverlay visible={true} streamText={streamText} />
-                </div>
+            {phase === 'input' && (
+              <div className={isGenerating ? 'max-w-3xl mx-auto' : ''}>
+                <InspirationInput
+                  onGenerate={handleGenerate}
+                  onCancel={handleCancelGenerate}
+                  isGenerating={isGenerating}
+                  onLoadShots={handleLoadTemplate}
+                  initialInspiration={inspiration}
+                />
+                {isGenerating && (
+                  <div className="mt-8">
+                    <StreamingGenerationOverlay visible={true} streamText={streamText} />
+                  </div>
+                )}
               </div>
             )}
 
