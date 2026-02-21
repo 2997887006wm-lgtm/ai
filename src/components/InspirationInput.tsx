@@ -22,10 +22,11 @@ interface InspirationInputProps {
   onCancel?: () => void;
   isGenerating: boolean;
   onLoadShots?: (shots: Shot[], title: string, duration: 'short' | 'long', mood: string) => void;
+  initialInspiration?: string;
 }
 
-export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadShots }: InspirationInputProps) {
-  const [inspiration, setInspiration] = useState('');
+export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadShots, initialInspiration = '' }: InspirationInputProps) {
+  const [inspiration, setInspiration] = useState(initialInspiration);
   const [duration, setDuration] = useState<'short' | 'long'>('short');
   const [mood, setMood] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -146,6 +147,12 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
   };
 
   useEffect(() => {
+    if (initialInspiration && !inspiration) {
+      setInspiration(initialInspiration);
+    }
+  }, [initialInspiration]);
+
+  useEffect(() => {
     return () => { recognitionRef.current?.stop(); };
   }, []);
 
@@ -167,6 +174,9 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
           />
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
           <span id="inspiration-help" className="sr-only">请输入您的创作灵感，AI将基于此生成完整分镜脚本</span>
+          <div className="flex justify-end mt-1 pr-1">
+            <span className="text-[11px] text-muted-foreground/40 tabular-nums">{inspiration.length} 字</span>
+          </div>
         </div>
 
         {/* Attachment toolbar */}
