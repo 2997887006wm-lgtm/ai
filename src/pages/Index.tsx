@@ -311,7 +311,7 @@ const Index = () => {
           const ssm = parsedData.sceneShotsMap as Record<string, any[]>;
           for (const sceneId of Object.keys(ssm)) {
             if (!Array.isArray(ssm[sceneId])) ssm[sceneId] = [];
-            while (ssm[sceneId].length < 5) {
+            while (ssm[sceneId].length < 8) {
               const idx = ssm[sceneId].length;
               ssm[sceneId].push({
                 shotType: ['中景', '近景', '特写', '全景', '远景'][idx % 5],
@@ -326,10 +326,10 @@ const Index = () => {
           const ensureLeaves = (node: any) => {
             if (!node.children || node.children.length === 0) {
               if (!ssm[node.id]) {
-                ssm[node.id] = Array.from({ length: 5 }, (_, i) => ({
-                  shotType: ['大远景', '中景', '近景', '特写', '全景'][i % 5],
-                  visual: `（待补充第${i + 1}个分镜画面）`, duration: '5s', dialogue: '', audio: '环境音',
-                  character: '', directorNote: '请补充此分镜的导演指示', emotionIntensity: 30 + i * 10,
+                ssm[node.id] = Array.from({ length: 8 }, (_, i) => ({
+                  shotType: ['大远景', '中景', '近景', '特写', '全景', '远景', '中景', '近景'][i % 8],
+                  visual: `（待补充第${i + 1}个分镜画面）`, duration: '4s', dialogue: '', audio: '环境音',
+                  character: '', directorNote: '请补充此分镜的导演指示', emotionIntensity: 30 + i * 8,
                 }));
               }
               return;
@@ -372,6 +372,31 @@ const Index = () => {
         }
       }
       setPhase('style');
+
+      // Auto-generate title after script is created
+      const allParsedShots = duration === 'long' ? Object.values(sceneShotsMap).flat() : shots;
+      setTimeout(async () => {
+        try {
+          const context = (duration === 'short' ? shots : Object.values(sceneShotsMap).flat())
+            .slice(0, 3).map(s => s.visual).filter(Boolean).join('；');
+          const { data: titleData } = await supabase.functions.invoke('generate-dialogue', {
+            body: {
+              visual: context || insp || '',
+              shotType: '标题',
+              character: '',
+              duration: '',
+              mode: 'narration',
+              customPrompt: `请为以下视频脚本生成一个简短有力的中文标题（不超过15字，不加引号不加标点，只输出标题文字）：\n灵感：${insp || '无'}\n内容：${context || '无'}`,
+            },
+          });
+          if (titleData?.text) {
+            const generatedTitle = titleData.text.replace(/["""''《》。，！？、：；]/g, '').trim().slice(0, 20);
+            setScriptTitle(generatedTitle);
+          }
+        } catch (e) {
+          console.error('Auto title generation error:', e);
+        }
+      }, 100);
     } catch (e: any) {
       if (e.name === 'AbortError' || controller.signal.aborted) return;
       console.error('Script generation error:', e);
