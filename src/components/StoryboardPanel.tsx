@@ -307,11 +307,11 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
           <button
             onClick={() => { playClick(); onGenerateVideo(selectedRatio); }}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm transition-all duration-300 hover:border-scarlet-glow hover:shadow-scarlet text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="使用AI一键生成视频，消耗5积点"
+            aria-label="合并所有分镜为单个视频提示词，生成一个5秒视频"
           >
             <Clapperboard size={14} strokeWidth={1.5} className="text-scarlet" />
-            一键成片
-            <span className="text-[10px] text-muted-foreground ml-1">({selectedRatio} · 5积点)</span>
+            合并成片
+            <span className="text-[10px] text-muted-foreground ml-1">(单个5s · 5积点)</span>
           </button>
         </div>
       </div>
