@@ -62,10 +62,10 @@ export function VoiceOverButton({ text }: VoiceOverButtonProps) {
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-scarlet hover:bg-scarlet/5 transition-all duration-300"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-scarlet/80 bg-scarlet/5 border border-scarlet/15 hover:text-scarlet hover:bg-scarlet/10 hover:border-scarlet/30 transition-all duration-300"
           title="智能配音"
         >
-          <Volume2 size={9} strokeWidth={2} />
+          <Volume2 size={10} strokeWidth={2} />
           配音
         </button>
       </PopoverTrigger>

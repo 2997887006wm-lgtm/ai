@@ -180,14 +180,14 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
             highlight
           />
           <div className="flex-1" />
-          <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition-all duration-300">
+            <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1.5 transition-all duration-300">
             <ShotCommentButton scriptId={scriptId || null} shotId={shot.id} />
             <button
               onClick={() => { playClick(); onDelete(shot.id); }}
-              className="text-muted-foreground/30 hover:text-destructive p-1.5 rounded-lg hover:bg-destructive/5 transition-colors"
+              className="text-muted-foreground/60 hover:text-destructive p-1.5 rounded-lg hover:bg-destructive/10 border border-transparent hover:border-destructive/20 transition-colors"
               title="删除此分镜"
             >
-              <Trash2 size={14} strokeWidth={1.5} />
+              <Trash2 size={14} strokeWidth={1.8} />
             </button>
           </div>
         </div>
@@ -215,7 +215,7 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
             <select
               value={imageRatio}
               onChange={(e) => setImageRatio(e.target.value)}
-              className="bg-transparent text-[10px] text-muted-foreground/50 border border-border/50 rounded px-1 py-0.5 outline-none cursor-pointer hover:border-border"
+              className="bg-secondary/80 text-[10px] text-foreground/70 font-medium border border-border rounded px-1.5 py-0.5 outline-none cursor-pointer hover:border-foreground/30 hover:bg-secondary transition-colors"
               title="选择配图比例"
             >
               {IMAGE_RATIOS.map(r => <option key={r} value={r}>{r}</option>)}
@@ -223,10 +223,10 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
             <button
               onClick={handleGenerateImage}
               disabled={isGeneratingImage || !shot.visual.trim()}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-scarlet hover:bg-scarlet/5 transition-all duration-300 disabled:opacity-30"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium text-scarlet/80 bg-scarlet/5 border border-scarlet/15 hover:text-scarlet hover:bg-scarlet/10 hover:border-scarlet/30 transition-all duration-300 disabled:opacity-30"
               title="AI 生成参考配图"
             >
-              {isGeneratingImage ? <Loader2 size={10} className="animate-spin" /> : <ImagePlus size={10} strokeWidth={2} />}
+              {isGeneratingImage ? <Loader2 size={11} className="animate-spin" /> : <ImagePlus size={11} strokeWidth={2} />}
               AI配图
             </button>
           </div>
@@ -245,19 +245,19 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
               <button
                 onClick={() => handleGenerateDialogue('dialogue')}
                 disabled={isGeneratingDialogue || !shot.visual.trim()}
-                className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-all duration-300 disabled:opacity-30"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-foreground/70 bg-secondary/80 border border-border hover:text-foreground hover:bg-secondary hover:border-foreground/20 transition-all duration-300 disabled:opacity-30"
                 title="AI 生成台词"
               >
-                {isGeneratingDialogue ? <Loader2 size={9} className="animate-spin" /> : <MessageSquarePlus size={9} strokeWidth={2} />}
+                {isGeneratingDialogue ? <Loader2 size={10} className="animate-spin" /> : <MessageSquarePlus size={10} strokeWidth={2} />}
                 台词
               </button>
               <button
                 onClick={() => handleGenerateDialogue('narration')}
                 disabled={isGeneratingDialogue || !shot.visual.trim()}
-                className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-all duration-300 disabled:opacity-30"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-foreground/70 bg-secondary/80 border border-border hover:text-foreground hover:bg-secondary hover:border-foreground/20 transition-all duration-300 disabled:opacity-30"
                 title="AI 生成旁白口播"
               >
-                <Mic size={9} strokeWidth={2} />
+                <Mic size={10} strokeWidth={2} />
                 口播
               </button>
               <VoiceOverButton text={shot.dialogue} />

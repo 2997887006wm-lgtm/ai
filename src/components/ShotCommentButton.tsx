@@ -142,12 +142,13 @@ export function ShotCommentButton({ scriptId, shotId }: ShotCommentButtonProps) 
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-primary hover:bg-primary/5 transition-all duration-300"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-primary/80 bg-primary/5 border border-primary/15 hover:text-primary hover:bg-primary/10 hover:border-primary/30 transition-all duration-300"
         title="评论此分镜"
       >
         <MessageCircle size={10} strokeWidth={2} />
+        评论
         {count > 0 && (
-          <span className="text-[9px] text-primary font-medium">{count}</span>
+          <span className="text-[9px] bg-primary text-primary-foreground rounded-full px-1 min-w-[14px] text-center leading-[14px]">{count}</span>
         )}
       </button>
 
