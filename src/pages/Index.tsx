@@ -12,8 +12,7 @@ import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
 import { VideoSequencePlayer, type VideoClip } from '@/components/VideoSequencePlayer';
-import { ScriptParserPanel } from '@/components/ScriptParserPanel';
-import { Music, FileText } from 'lucide-react';
+import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
 import { useVideoPolling } from '@/hooks/useVideoPolling';
@@ -54,7 +53,7 @@ function getFirstLeafId(node: TreeNode): string | null {
   return getFirstLeafId(node.children[0]);
 }
 
-type Phase = 'input' | 'style' | 'storyboard' | 'parser';
+type Phase = 'input' | 'style' | 'storyboard';
 
 const Index = () => {
   const { user } = useAuth();
@@ -553,16 +552,6 @@ const Index = () => {
     setCurrentScriptId(null);
   };
 
-  const handleScriptParsed = useCallback((parsedShots: Shot[]) => {
-    setDurationType('short');
-    setShots(parsedShots);
-    setScriptTree({ id: 'root', label: '总纲', children: [] });
-    setSceneShotsMap({});
-    setActiveTreeNode(null);
-    setPhase('storyboard');
-    generateDialogueSuggestions(parsedShots);
-  }, [generateDialogueSuggestions]);
-
   const allShotsForPreview = durationType === 'long'
     ? Object.values(sceneShotsMap).flat()
     : shots;
@@ -599,28 +588,10 @@ const Index = () => {
             )}
 
             {phase === 'input' && (
-              <>
-                <InspirationInput
-                  onGenerate={handleGenerate}
-                  onCancel={handleCancelGenerate}
-                  isGenerating={isGenerating}
-                />
-                <div className="max-w-3xl mx-auto mt-8 pt-8 border-t border-border">
-                  <button
-                    onClick={() => { playClick(); setPhase('parser'); }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-300"
-                  >
-                    <FileText size={14} strokeWidth={1.5} />
-                    已有剧本？智能解析为分镜
-                  </button>
-                </div>
-              </>
-            )}
-
-            {phase === 'parser' && (
-              <ScriptParserPanel
-                isVisible={true}
-                onParsed={handleScriptParsed}
+              <InspirationInput
+                onGenerate={handleGenerate}
+                onCancel={handleCancelGenerate}
+                isGenerating={isGenerating}
               />
             )}
 
