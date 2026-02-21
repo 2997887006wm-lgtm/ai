@@ -12,6 +12,7 @@ import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
 import { VideoSequencePlayer, type VideoClip } from '@/components/VideoSequencePlayer';
+import { CopyrightModal } from '@/components/CopyrightModal';
 import { StreamingGenerationOverlay } from '@/components/StreamingGenerationOverlay';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
@@ -67,6 +68,7 @@ const Index = () => {
   const [credits, setCredits] = useState(15);
   const [showCredits, setShowCredits] = useState(false);
   const [showAudioLib, setShowAudioLib] = useState(false);
+  const [showCopyright, setShowCopyright] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [durationType, setDurationType] = useState<'short' | 'long'>('short');
@@ -740,6 +742,7 @@ const Index = () => {
                     title={scriptTitle}
                     onTitleChange={setScriptTitle}
                     inspiration={inspiration}
+                    onCopyright={() => setShowCopyright(true)}
                   />
                 </div>
               </div>
@@ -761,6 +764,7 @@ const Index = () => {
                 title={scriptTitle}
                 onTitleChange={setScriptTitle}
                 inspiration={inspiration}
+                onCopyright={() => setShowCopyright(true)}
               />
             )}
           </div>
@@ -810,6 +814,19 @@ const Index = () => {
         open={showSequencePlayer}
         onOpenChange={setShowSequencePlayer}
         clips={sequenceClips}
+      />
+
+      <CopyrightModal
+        visible={showCopyright}
+        onClose={() => setShowCopyright(false)}
+        shots={durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots}
+        title={scriptTitle}
+        inspiration={inspiration}
+        durationType={durationType}
+        scriptTree={scriptTree}
+        sceneShotsMap={sceneShotsMap}
+        currentScriptId={currentScriptId}
+        userId={user?.id || null}
       />
     </div>
   );

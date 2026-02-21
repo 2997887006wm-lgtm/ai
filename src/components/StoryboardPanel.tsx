@@ -1,7 +1,7 @@
 import { useCallback, useState, useMemo } from 'react';
 import { StoryboardCard, type Shot } from './StoryboardCard';
 import { EmotionCurveChart } from './EmotionCurveChart';
-import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock, Music2 } from 'lucide-react';
+import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock, Music2, Shield } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -57,9 +57,10 @@ interface StoryboardPanelProps {
   title?: string;
   onTitleChange?: (title: string) => void;
   inspiration?: string;
+  onCopyright?: () => void;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateShotVideo, generatingVideoShotIds = [], title, onTitleChange, inspiration }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateShotVideo, generatingVideoShotIds = [], title, onTitleChange, inspiration, onCopyright }: StoryboardPanelProps) {
   const [activeDragId, setActiveDragId] = useState<number | null>(null);
   const [selectedRatio, setSelectedRatio] = useState('16:9');
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
@@ -288,6 +289,14 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
         </div>
 
         <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={() => { playClick(); onCopyright?.(); }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border text-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all duration-300"
+            aria-label="版权存证"
+          >
+            <Shield size={14} strokeWidth={1.5} />
+            版权存证
+          </button>
           <button
             onClick={() => { playClick(); onPreview(); }}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm text-foreground hover:bg-secondary transition-all duration-300"
