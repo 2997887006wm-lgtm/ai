@@ -116,6 +116,33 @@ export type Database = {
         }
         Relationships: []
       }
+      script_fingerprints: {
+        Row: {
+          content_hash: string
+          created_at: string
+          fingerprint_data: Json
+          id: string
+          script_id: string
+          user_id: string | null
+        }
+        Insert: {
+          content_hash: string
+          created_at?: string
+          fingerprint_data?: Json
+          id?: string
+          script_id: string
+          user_id?: string | null
+        }
+        Update: {
+          content_hash?: string
+          created_at?: string
+          fingerprint_data?: Json
+          id?: string
+          script_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       scripts: {
         Row: {
           created_at: string
