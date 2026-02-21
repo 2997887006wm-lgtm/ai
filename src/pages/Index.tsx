@@ -12,6 +12,7 @@ import { AudioLibraryPanel } from '@/components/AudioLibraryPanel';
 import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
 import { VideoSequencePlayer, type VideoClip } from '@/components/VideoSequencePlayer';
+import { StreamingGenerationOverlay } from '@/components/StreamingGenerationOverlay';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
@@ -77,6 +78,7 @@ const Index = () => {
   const [inspiration, setInspiration] = useState('');
   const [currentMood, setCurrentMood] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const [streamText, setStreamText] = useState('');
 
   // Auto-open preview when a per-shot batch completes
   useEffect(() => {
@@ -222,66 +224,150 @@ const Index = () => {
     setInspiration(insp);
     setCurrentMood(mood);
     setCurrentScriptId(null);
+    setStreamText('');
 
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
-      const { data, error } = await supabase.functions.invoke('generate-script', {
-        body: { inspiration: insp, duration, mood },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/generate-script`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ inspiration: insp, duration, mood }),
+        signal: controller.signal,
       });
 
-      if (controller.signal.aborted) return;
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || 'AI生成失败');
+      }
 
-      if (data?.ragUsed) {
+      const reader = resp.body?.getReader();
+      if (!reader) throw new Error('无法获取流式响应');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+      let ragUsed = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (controller.signal.aborted) return;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+
+          if (!line || line.startsWith(':')) continue;
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.type === 'meta') {
+              ragUsed = !!parsed.ragUsed;
+            } else if (parsed.type === 'token' && parsed.content) {
+              fullContent += parsed.content;
+              setStreamText(fullContent);
+            }
+          } catch {
+            // partial JSON, skip
+          }
+        }
+      }
+
+      if (controller.signal.aborted) return;
+
+      if (ragUsed) {
         toast.info('已参考经典电影分镜手法与自然常识知识库');
       }
 
+      // Parse the complete JSON content
+      let cleanContent = fullContent.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      let parsedData;
+      try {
+        parsedData = JSON.parse(cleanContent);
+      } catch {
+        console.error('Failed to parse streamed JSON:', cleanContent);
+        throw new Error('脚本解析失败，请重试');
+      }
+
       if (duration === 'long') {
-        if (data?.tree && data?.sceneShotsMap) {
-          setScriptTree(data.tree);
+        if (parsedData?.tree && parsedData?.sceneShotsMap) {
+          // Validate: every scene must have >= 5 shots
+          const ssm = parsedData.sceneShotsMap as Record<string, any[]>;
+          for (const sceneId of Object.keys(ssm)) {
+            if (!Array.isArray(ssm[sceneId])) ssm[sceneId] = [];
+            while (ssm[sceneId].length < 5) {
+              const idx = ssm[sceneId].length;
+              ssm[sceneId].push({
+                shotType: ['中景', '近景', '特写', '全景', '远景'][idx % 5],
+                visual: `（待补充第${idx + 1}个分镜画面）`,
+                duration: '5s', dialogue: '', audio: '环境音', character: '',
+                directorNote: '请补充此分镜的导演指示', emotionIntensity: 40 + idx * 5,
+              });
+            }
+          }
+
+          // Ensure every leaf node has an entry
+          const ensureLeaves = (node: any) => {
+            if (!node.children || node.children.length === 0) {
+              if (!ssm[node.id]) {
+                ssm[node.id] = Array.from({ length: 5 }, (_, i) => ({
+                  shotType: ['大远景', '中景', '近景', '特写', '全景'][i % 5],
+                  visual: `（待补充第${i + 1}个分镜画面）`, duration: '5s', dialogue: '', audio: '环境音',
+                  character: '', directorNote: '请补充此分镜的导演指示', emotionIntensity: 30 + i * 10,
+                }));
+              }
+              return;
+            }
+            for (const child of node.children) ensureLeaves(child);
+          };
+          ensureLeaves(parsedData.tree);
+
+          setScriptTree(parsedData.tree);
           const parsedMap: Record<string, Shot[]> = {};
-          for (const [sceneId, rawShots] of Object.entries(data.sceneShotsMap)) {
+          for (const [sceneId, rawShots] of Object.entries(ssm)) {
             parsedMap[sceneId] = (rawShots as any[]).map((s: any, i: number) => ({
-              id: nextShotId++,
-              shotNumber: String(i + 1).padStart(2, '0'),
-              shotType: s.shotType || '中景',
-              visual: s.visual || '',
-              duration: s.duration || '5s',
-              dialogue: s.dialogue || '',
-              audio: s.audio || '',
-              character: s.character || '',
+              id: nextShotId++, shotNumber: String(i + 1).padStart(2, '0'),
+              shotType: s.shotType || '中景', visual: s.visual || '', duration: s.duration || '5s',
+              dialogue: s.dialogue || '', audio: s.audio || '', character: s.character || '',
               directorNote: s.directorNote || '',
               emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
             }));
           }
           setSceneShotsMap(parsedMap);
-          const firstLeaf = getFirstLeafId(data.tree);
+          const firstLeaf = getFirstLeafId(parsedData.tree);
           setActiveTreeNode(firstLeaf);
           if (firstLeaf && parsedMap[firstLeaf]) {
             setShots(parsedMap[firstLeaf]);
-            // Auto-generate dialogue for first scene
             generateDialogueSuggestions(parsedMap[firstLeaf]);
           }
         }
       } else {
-        if (data?.shots && Array.isArray(data.shots)) {
-          const parsed: Shot[] = data.shots.map((s: any, i: number) => ({
-            id: nextShotId++,
-            shotNumber: String(i + 1).padStart(2, '0'),
-            shotType: s.shotType || '中景',
-            visual: s.visual || '',
-            duration: s.duration || '5s',
-            dialogue: s.dialogue || '',
-            audio: s.audio || '',
-            character: s.character || '',
+        const shotsArr = Array.isArray(parsedData) ? parsedData : parsedData?.shots;
+        if (shotsArr && Array.isArray(shotsArr)) {
+          const parsed: Shot[] = shotsArr.map((s: any, i: number) => ({
+            id: nextShotId++, shotNumber: String(i + 1).padStart(2, '0'),
+            shotType: s.shotType || '中景', visual: s.visual || '', duration: s.duration || '5s',
+            dialogue: s.dialogue || '', audio: s.audio || '', character: s.character || '',
             directorNote: s.directorNote || '',
             emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
           }));
           setShots(parsed);
-          // Auto-generate dialogue suggestions
           generateDialogueSuggestions(parsed);
         }
       }
@@ -291,7 +377,10 @@ const Index = () => {
       console.error('Script generation error:', e);
       toast.error(e.message || '脚本生成失败，请重试');
     } finally {
-      if (!controller.signal.aborted) setIsGenerating(false);
+      if (!controller.signal.aborted) {
+        setIsGenerating(false);
+        setStreamText('');
+      }
       abortRef.current = null;
     }
   }, [generateDialogueSuggestions]);
@@ -587,12 +676,25 @@ const Index = () => {
               </div>
             )}
 
-            {phase === 'input' && (
+            {phase === 'input' && !isGenerating && (
               <InspirationInput
                 onGenerate={handleGenerate}
                 onCancel={handleCancelGenerate}
                 isGenerating={isGenerating}
               />
+            )}
+
+            {phase === 'input' && isGenerating && (
+              <div className="max-w-3xl mx-auto">
+                <InspirationInput
+                  onGenerate={handleGenerate}
+                  onCancel={handleCancelGenerate}
+                  isGenerating={isGenerating}
+                />
+                <div className="mt-8">
+                  <StreamingGenerationOverlay visible={true} streamText={streamText} />
+                </div>
+              </div>
             )}
 
             {phase === 'storyboard' && durationType === 'long' && (

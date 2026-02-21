@@ -9,7 +9,6 @@ const corsHeaders = {
 // Embed query and search knowledge base for RAG context
 async function searchKnowledge(query: string, zhipuKey: string, supabaseUrl: string, serviceKey: string): Promise<string> {
   try {
-    // Get embedding
     const embResponse = await fetch('https://open.bigmodel.cn/api/paas/v4/embeddings', {
       method: 'POST',
       headers: {
@@ -24,7 +23,6 @@ async function searchKnowledge(query: string, zhipuKey: string, supabaseUrl: str
     const embedding = embData.data?.[0]?.embedding;
     if (!embedding) return '';
 
-    // Search via RPC
     const supabase = createClient(supabaseUrl, serviceKey);
     const { data, error } = await supabase.rpc('match_knowledge', {
       query_embedding_text: JSON.stringify(embedding),
@@ -34,7 +32,6 @@ async function searchKnowledge(query: string, zhipuKey: string, supabaseUrl: str
 
     if (error || !data || data.length === 0) return '';
 
-    // Format RAG context
     return data.map((d: any) => `【${d.category === 'film_technique' ? '电影技法' : '自然常识'}】${d.title}：${d.content}`).join('\n');
   } catch (e) {
     console.error('RAG search error:', e);
@@ -173,6 +170,7 @@ ${moodHint}${ragSection}
 直接输出 JSON 数组，不要包含任何其他内容。`;
     }
 
+    // Call Zhipu API with streaming enabled
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: {
@@ -185,8 +183,9 @@ ${moodHint}${ragSection}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-      temperature: 0.7,
-      max_tokens: 8000,
+        temperature: 0.7,
+        max_tokens: 8000,
+        stream: true,
       }),
     });
 
@@ -203,80 +202,61 @@ ${moodHint}${ragSection}
       });
     }
 
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
-    content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    // Stream SSE: forward Zhipu's stream to client, plus prepend ragUsed info
+    const encoder = new TextEncoder();
 
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      console.error('Failed to parse AI response as JSON:', content);
-      return new Response(JSON.stringify({ error: '脚本解析失败，请重试' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Send rag info as first event
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'meta', ragUsed: !!ragContext, duration })}\n\n`));
 
-    if (duration === 'long') {
-      if (!parsed.tree || !parsed.sceneShotsMap) {
-        return new Response(JSON.stringify({ error: '长片脚本格式错误，请重试' }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      // Validate: every scene must have ≥ 5 shots; pad with placeholder shots if needed
-      const ssm = parsed.sceneShotsMap as Record<string, any[]>;
-      for (const sceneId of Object.keys(ssm)) {
-        if (!Array.isArray(ssm[sceneId])) ssm[sceneId] = [];
-        while (ssm[sceneId].length < 5) {
-          const idx = ssm[sceneId].length;
-          ssm[sceneId].push({
-            shotType: ['中景', '近景', '特写', '全景', '远景'][idx % 5],
-            visual: `（待补充第${idx + 1}个分镜画面）`,
-            duration: '5s',
-            dialogue: '',
-            audio: '环境音',
-            character: '',
-            directorNote: '请补充此分镜的导演指示',
-            emotionIntensity: 40 + idx * 5,
-          });
-        }
-      }
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-      // Also ensure every leaf node in the tree has an entry in sceneShotsMap
-      const ensureLeaves = (node: any) => {
-        if (!node.children || node.children.length === 0) {
-          if (!ssm[node.id]) {
-            ssm[node.id] = Array.from({ length: 5 }, (_, i) => ({
-              shotType: ['大远景', '中景', '近景', '特写', '全景'][i % 5],
-              visual: `（待补充第${i + 1}个分镜画面）`,
-              duration: '5s',
-              dialogue: '',
-              audio: '环境音',
-              character: '',
-              directorNote: '请补充此分镜的导演指示',
-              emotionIntensity: 30 + i * 10,
-            }));
+            buffer += decoder.decode(value, { stream: true });
+
+            let newlineIndex: number;
+            while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+              const line = buffer.slice(0, newlineIndex).trim();
+              buffer = buffer.slice(newlineIndex + 1);
+
+              if (!line || line.startsWith(':')) continue;
+              if (!line.startsWith('data: ')) continue;
+
+              const jsonStr = line.slice(6).trim();
+              if (jsonStr === '[DONE]') {
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                continue;
+              }
+
+              try {
+                const parsed = JSON.parse(jsonStr);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'token', content })}\n\n`));
+                }
+              } catch {
+                // partial JSON, skip
+              }
+            }
           }
-          return;
+        } catch (e) {
+          console.error('Stream read error:', e);
+        } finally {
+          controller.close();
         }
-        for (const child of node.children) ensureLeaves(child);
-      };
-      ensureLeaves(parsed.tree);
-
-      return new Response(JSON.stringify({ tree: parsed.tree, sceneShotsMap: ssm, ragUsed: !!ragContext }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    } else {
-      if (!Array.isArray(parsed)) {
-        return new Response(JSON.stringify({ error: '脚本格式错误，请重试' }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       }
-      return new Response(JSON.stringify({ shots: parsed, ragUsed: !!ragContext }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    });
+
+    return new Response(stream, {
+      headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+    });
   } catch (error) {
     console.error('generate-script error:', error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
