@@ -73,15 +73,15 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
         {/* Credits */}
         <button
           onClick={() => { playClick(); onCreditsClick(); }}
-          className="flex flex-col items-center gap-1.5 group cursor-pointer"
+          className="flex flex-col items-center gap-1 w-14 py-1.5 rounded-lg group cursor-pointer hover:bg-charcoal-light transition-all duration-300"
           title="查看积点"
         >
           <Droplets
-            size={15}
-            strokeWidth={1.2}
-            className="text-sidebar-foreground/30 group-hover:text-scarlet-light/50 transition-colors duration-500 animate-gentle-pulse"
+            size={17}
+            strokeWidth={1.5}
+            className="text-scarlet-light/70 group-hover:text-scarlet-light transition-colors duration-500 animate-gentle-pulse"
           />
-          <span className="text-[9px] text-sidebar-foreground/25 group-hover:text-sidebar-foreground/50 transition-colors duration-500 font-sans tabular-nums tracking-wide">
+          <span className="text-[10px] leading-none text-scarlet-light/60 group-hover:text-scarlet-light transition-colors duration-500 font-medium tabular-nums">
             {user ? (profile?.credits ?? credits) : credits}
           </span>
         </button>
