@@ -148,9 +148,10 @@ function ExportButton({ icon: Icon, label, onClick }: { icon: typeof FileText; l
     <button
       onClick={onClick}
       title={`导出 ${label}`}
-      className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+      className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-[11px]"
     >
-      <Icon size={14} strokeWidth={1.5} />
+      <Icon size={13} strokeWidth={1.5} />
+      <span>{label}</span>
     </button>
   );
 }
