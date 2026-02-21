@@ -61,6 +61,7 @@ const Index = () => {
   const { videoJobs, addJob, startBatch, onBatchComplete } = useVideoPolling();
   const [showSequencePlayer, setShowSequencePlayer] = useState(false);
   const [sequenceClips, setSequenceClips] = useState<VideoClip[]>([]);
+  const [generatingVideoShotIds, setGeneratingVideoShotIds] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<'new' | 'history' | 'videos'>('new');
   const [phase, setPhase] = useState<Phase>('input');
   const [credits, setCredits] = useState(15);
@@ -552,7 +553,7 @@ const Index = () => {
     }
   }, []);
 
-  // Video generation (single combined prompt)
+  // Video generation (merge all shots into one combined prompt)
   const handleGenerateVideo = useCallback(async (ratio?: string) => {
     const processingJobs = videoJobs.filter(j => j.status === 'processing');
     if (processingJobs.length >= 3) {
@@ -586,74 +587,65 @@ const Index = () => {
       const jobDbId = inserted?.id || taskId;
 
       addJob({ id: jobDbId, taskId, prompt, status: 'processing', startedAt: Date.now() }, taskId);
-      toast.info('视频生成任务已提交，预计需要2-5分钟');
-      setCredits(c => Math.max(0, c - 5));
+      toast.info('合并成片任务已提交，预计需要2-5分钟');
+      setCredits(c => Math.max(0, c - allShots.length));
     } catch (e: any) {
       console.error('Video generation error:', e);
       toast.error(e.message || '视频生成失败');
     }
   }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob, scriptTitle]);
 
-  // Per-shot video generation (each shot gets its own optimized prompt)
-  const handleGenerateVideoPerShot = useCallback(async (ratio?: string) => {
-    const allShots = durationType === 'long' ? Object.values(sceneShotsMap).flat() : shots;
+  // Single-shot video generation
+  const handleGenerateShotVideo = useCallback(async (shot: Shot, ratio?: string) => {
     const processingJobs = videoJobs.filter(j => j.status === 'processing');
-    if (processingJobs.length + allShots.length > 10) {
-      toast.warning(`逐镜生成将提交${allShots.length}个任务，当前队列已满，请等待部分完成`);
+    if (processingJobs.length >= 3) {
+      toast.warning('最多同时生成3个视频，请等待完成');
       return;
     }
 
-    toast.info(`开始逐镜生成 ${allShots.length} 个视频片段…`);
-    let submitted = 0;
-    const batchJobIds: string[] = [];
+    setGeneratingVideoShotIds(prev => [...prev, shot.id]);
 
-    for (const [i, shot] of allShots.entries()) {
-      // Build per-shot cinematic prompt
-      const shotPrompt = [
-        `景别: ${shot.shotType}`,
-        `画面: ${shot.visual}`,
-        shot.dialogue ? `台词: ${shot.dialogue}` : '',
-        shot.directorNote ? `导演指示: ${shot.directorNote}` : '',
-        shot.audio ? `音效氛围: ${shot.audio}` : '',
-        `时长: ${shot.duration}`,
-        ratio ? `画面比例: ${ratio}` : '',
-      ].filter(Boolean).join('。');
+    const shotPrompt = [
+      `景别: ${shot.shotType}`,
+      `画面: ${shot.visual}`,
+      shot.dialogue ? `台词: ${shot.dialogue}` : '',
+      shot.directorNote ? `导演指示: ${shot.directorNote}` : '',
+      shot.audio ? `音效氛围: ${shot.audio}` : '',
+      `时长: ${shot.duration}`,
+      ratio ? `画面比例: ${ratio}` : '',
+    ].filter(Boolean).join('。');
 
-      try {
-        const { data, error } = await supabase.functions.invoke('generate-video', {
-          body: { action: 'submit', prompt: shotPrompt },
-        });
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-video', {
+        body: { action: 'submit', prompt: shotPrompt },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
 
-        const taskId = data?.taskId;
-        if (!taskId) continue;
+      const taskId = data?.taskId;
+      if (!taskId) throw new Error('未获取到视频任务ID');
 
-        const dbRow = {
-          task_id: taskId,
-          prompt: shotPrompt.slice(0, 2000),
-          status: 'processing',
-          title: `镜头${i + 1} · ${shot.shotType} · ${shot.visual.slice(0, 30)}`,
-          user_id: user?.id || null,
-        };
-        const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
-        const jobDbId = inserted?.id || taskId;
+      const dbRow = {
+        task_id: taskId,
+        prompt: shotPrompt.slice(0, 2000),
+        status: 'processing',
+        title: `镜头${shot.shotNumber} · ${shot.shotType} · ${shot.visual.slice(0, 30)}`,
+        user_id: user?.id || null,
+      };
+      const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
+      const jobDbId = inserted?.id || taskId;
 
-        addJob({ id: jobDbId, taskId, prompt: shotPrompt, status: 'processing', startedAt: Date.now() }, taskId);
-        batchJobIds.push(jobDbId);
-        submitted++;
-      } catch (e: any) {
-        console.error(`Shot ${i + 1} video error:`, e);
-        toast.error(`镜头${i + 1}提交失败: ${e.message}`);
-      }
+      addJob({ id: jobDbId, taskId, prompt: shotPrompt, status: 'processing', startedAt: Date.now() }, taskId);
+      toast.info(`镜头 #${shot.shotNumber} 视频生成已提交`);
+      setCredits(c => Math.max(0, c - 1));
+    } catch (e: any) {
+      console.error('Shot video generation error:', e);
+      toast.error(e.message || '视频生成失败');
+    } finally {
+      setGeneratingVideoShotIds(prev => prev.filter(id => id !== shot.id));
     }
+  }, [videoJobs, user, addJob]);
 
-    if (submitted > 0) {
-      startBatch(batchJobIds);
-      toast.success(`已提交 ${submitted}/${allShots.length} 个镜头的视频生成任务`);
-      setCredits(c => Math.max(0, c - submitted * 5));
-    }
-  }, [shots, sceneShotsMap, durationType, videoJobs, user, addJob, startBatch]);
 
   const handleNewProject = () => {
     setActiveTab('new');
@@ -743,7 +735,8 @@ const Index = () => {
                     credits={credits}
                     onPreview={() => setShowPreview(true)}
                     onGenerateVideo={handleGenerateVideo}
-                    onGenerateVideoPerShot={handleGenerateVideoPerShot}
+                    onGenerateShotVideo={handleGenerateShotVideo}
+                    generatingVideoShotIds={generatingVideoShotIds}
                     title={scriptTitle}
                     onTitleChange={setScriptTitle}
                     inspiration={inspiration}
@@ -763,7 +756,8 @@ const Index = () => {
                 credits={credits}
                 onPreview={() => setShowPreview(true)}
                 onGenerateVideo={handleGenerateVideo}
-                onGenerateVideoPerShot={handleGenerateVideoPerShot}
+                onGenerateShotVideo={handleGenerateShotVideo}
+                generatingVideoShotIds={generatingVideoShotIds}
                 title={scriptTitle}
                 onTitleChange={setScriptTitle}
                 inspiration={inspiration}

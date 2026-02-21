@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Trash2, Plus, ImagePlus, MessageSquarePlus, Mic, Loader2 } from 'lucide-react';
+import { GripVertical, Trash2, Plus, ImagePlus, MessageSquarePlus, Mic, Loader2, Clapperboard } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
 import { VoiceOverButton } from './VoiceOverButton';
@@ -28,6 +28,8 @@ interface StoryboardCardProps {
   onUpdate: (id: number, field: keyof Shot, value: string) => void;
   onDelete: (id: number) => void;
   onInsertAfter: (id: number) => void;
+  onGenerateShotVideo?: (shot: Shot) => void;
+  isGeneratingVideo?: boolean;
 }
 
 function InlineField({ label, value, onChange, multiline = false, highlight = false }: {
@@ -62,7 +64,7 @@ function InlineField({ label, value, onChange, multiline = false, highlight = fa
   );
 }
 
-export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter }: StoryboardCardProps) {
+export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter, onGenerateShotVideo, isGeneratingVideo }: StoryboardCardProps) {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingDialogue, setIsGeneratingDialogue] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(shot.imageUrl || null);
@@ -294,6 +296,22 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter 
             onChange={(v) => onUpdate(shot.id, 'directorNote', v)}
           />
         </div>
+
+        {/* Generate video for this shot */}
+        {onGenerateShotVideo && (
+          <div className="mt-4 pt-3 border-t border-border flex justify-end">
+            <button
+              onClick={() => { playClick(); onGenerateShotVideo(shot); }}
+              disabled={isGeneratingVideo || !shot.visual.trim()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] border border-primary/20 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all duration-300 disabled:opacity-30"
+              title="为此分镜生成视频片段"
+            >
+              {isGeneratingVideo ? <Loader2 size={12} className="animate-spin" /> : <Clapperboard size={12} strokeWidth={1.5} />}
+              生成此镜视频
+              <span className="text-[10px] text-muted-foreground/60">· 1积点</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Insert button between cards */}
