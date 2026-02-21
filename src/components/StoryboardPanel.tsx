@@ -1,7 +1,7 @@
 import { useCallback, useState, useMemo } from 'react';
 import { StoryboardCard, type Shot } from './StoryboardCard';
 import { EmotionCurveChart } from './EmotionCurveChart';
-import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock, Music2, Wand2 } from 'lucide-react';
+import { Clapperboard, Plus, Eye, Sparkles, Loader2, Clock, Music2 } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -52,13 +52,14 @@ interface StoryboardPanelProps {
   credits: number;
   onPreview: () => void;
   onGenerateVideo: (ratio?: string) => void;
-  onGenerateVideoPerShot?: (ratio?: string) => void;
+  onGenerateShotVideo?: (shot: Shot, ratio?: string) => void;
+  generatingVideoShotIds?: number[];
   title?: string;
   onTitleChange?: (title: string) => void;
   inspiration?: string;
 }
 
-export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateVideoPerShot, title, onTitleChange, inspiration }: StoryboardPanelProps) {
+export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteShot, onInsertShot, onAddShot, credits, onPreview, onGenerateVideo, onGenerateShotVideo, generatingVideoShotIds = [], title, onTitleChange, inspiration }: StoryboardPanelProps) {
   const [activeDragId, setActiveDragId] = useState<number | null>(null);
   const [selectedRatio, setSelectedRatio] = useState('16:9');
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
@@ -241,6 +242,8 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
                 onUpdate={onUpdateShot}
                 onDelete={onDeleteShot}
                 onInsertAfter={onInsertShot}
+                onGenerateShotVideo={onGenerateShotVideo ? (s) => onGenerateShotVideo(s, selectedRatio) : undefined}
+                isGeneratingVideo={generatingVideoShotIds.includes(shot.id)}
               />
             ))}
           </div>
@@ -293,25 +296,14 @@ export function StoryboardPanel({ shots, onUpdateShot, onReorderShots, onDeleteS
             <Eye size={14} strokeWidth={1.5} />
             预览 & 导出脚本
           </button>
-          {onGenerateVideoPerShot && (
-            <button
-              onClick={() => { playClick(); onGenerateVideoPerShot(selectedRatio); }}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-primary/30 text-sm transition-all duration-300 hover:border-primary hover:shadow-sm text-foreground"
-              aria-label="逐镜拆分生成视频"
-            >
-              <Wand2 size={14} strokeWidth={1.5} className="text-primary" />
-              逐镜成片
-              <span className="text-[10px] text-muted-foreground ml-1">({shots.length}镜 · {shots.length * 5}积点)</span>
-            </button>
-          )}
           <button
             onClick={() => { playClick(); onGenerateVideo(selectedRatio); }}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-border text-sm transition-all duration-300 hover:border-scarlet-glow hover:shadow-scarlet text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="合并所有分镜为单个视频提示词，生成一个5秒视频"
+            aria-label="合并所有分镜为视频"
           >
             <Clapperboard size={14} strokeWidth={1.5} className="text-scarlet" />
             合并成片
-            <span className="text-[10px] text-muted-foreground ml-1">(单个5s · 5积点)</span>
+            <span className="text-[10px] text-muted-foreground ml-1">({shots.length}镜 · {shots.length}积点)</span>
           </button>
         </div>
       </div>
