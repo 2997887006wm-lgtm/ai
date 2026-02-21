@@ -116,6 +116,53 @@ export type Database = {
         }
         Relationships: []
       }
+      script_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          parent_id: string | null
+          resolved: boolean
+          scene_id: string | null
+          script_id: string
+          shot_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          resolved?: boolean
+          scene_id?: string | null
+          script_id: string
+          shot_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          resolved?: boolean
+          scene_id?: string | null
+          script_id?: string
+          shot_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "script_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "script_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       script_fingerprints: {
         Row: {
           content_hash: string
@@ -142,6 +189,65 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      script_presence: {
+        Row: {
+          cursor_position: Json | null
+          id: string
+          last_seen: string
+          script_id: string
+          user_id: string
+        }
+        Insert: {
+          cursor_position?: Json | null
+          id?: string
+          last_seen?: string
+          script_id: string
+          user_id: string
+        }
+        Update: {
+          cursor_position?: Json | null
+          id?: string
+          last_seen?: string
+          script_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      script_shares: {
+        Row: {
+          created_at: string
+          id: string
+          permission: string
+          script_id: string
+          shared_by: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permission?: string
+          script_id: string
+          shared_by: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permission?: string
+          script_id?: string
+          shared_by?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "script_shares_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scripts: {
         Row: {
@@ -182,6 +288,109 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      team_invitations: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          invitee_email: string
+          inviter_id: string
+          role: Database["public"]["Enums"]["team_role"]
+          status: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          invitee_email: string
+          inviter_id: string
+          role?: Database["public"]["Enums"]["team_role"]
+          status?: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          invitee_email?: string
+          inviter_id?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          status?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invitations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          id: string
+          joined_at: string
+          role: Database["public"]["Enums"]["team_role"]
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -290,6 +499,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_team_role: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: Database["public"]["Enums"]["team_role"]
+      }
+      is_team_member: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: boolean
+      }
       match_knowledge: {
         Args: {
           match_count?: number
@@ -306,7 +523,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      team_role: "owner" | "admin" | "editor" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -433,6 +650,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      team_role: ["owner", "admin", "editor", "viewer"],
+    },
   },
 } as const

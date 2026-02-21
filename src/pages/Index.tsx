@@ -13,6 +13,9 @@ import { ScriptPreviewSidebar } from '@/components/ScriptPreviewSidebar';
 import { VideoLibraryPanel } from '@/components/VideoLibraryPanel';
 import { VideoSequencePlayer, type VideoClip } from '@/components/VideoSequencePlayer';
 import { CopyrightModal } from '@/components/CopyrightModal';
+import { CommentPanel } from '@/components/CommentPanel';
+import { TeamPanel } from '@/components/TeamPanel';
+import { CollaborationPresence } from '@/components/CollaborationPresence';
 import { StreamingGenerationOverlay } from '@/components/StreamingGenerationOverlay';
 import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
@@ -70,6 +73,8 @@ const Index = () => {
   const [showAudioLib, setShowAudioLib] = useState(false);
   const [showCopyright, setShowCopyright] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showTeam, setShowTeam] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [durationType, setDurationType] = useState<'short' | 'long'>('short');
   const [shots, setShots] = useState<Shot[]>(MOCK_SHORT_SHOTS);
@@ -672,6 +677,7 @@ const Index = () => {
         onHistory={() => setActiveTab('history')}
         onVideoLibrary={() => setActiveTab('videos')}
         onCreditsClick={() => setShowCredits(true)}
+        onTeam={() => setShowTeam(true)}
         activeTab={activeTab}
       />
 
@@ -727,6 +733,16 @@ const Index = () => {
                   />
                 </div>
                 <div className="flex-1 animate-slide-in-right" key={activeTreeNode}>
+                  {/* Collaboration presence bar */}
+                  <div className="flex items-center justify-end mb-3 gap-2">
+                    <CollaborationPresence scriptId={currentScriptId} />
+                    <button
+                      onClick={() => setShowComments(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
+                    >
+                      💬 评论
+                    </button>
+                  </div>
                   <StoryboardPanel
                     shots={shots}
                     onUpdateShot={handleUpdateShot}
@@ -749,23 +765,35 @@ const Index = () => {
             )}
 
             {phase === 'storyboard' && durationType === 'short' && (
-              <StoryboardPanel
-                shots={shots}
-                onUpdateShot={handleUpdateShot}
-                onReorderShots={handleReorderShots}
-                onDeleteShot={handleDeleteShot}
-                onInsertShot={handleInsertShot}
-                onAddShot={handleAddShot}
-                credits={credits}
-                onPreview={() => setShowPreview(true)}
-                onGenerateVideo={handleGenerateVideo}
-                onGenerateShotVideo={handleGenerateShotVideo}
-                generatingVideoShotIds={generatingVideoShotIds}
-                title={scriptTitle}
-                onTitleChange={setScriptTitle}
-                inspiration={inspiration}
-                onCopyright={() => setShowCopyright(true)}
-              />
+              <div>
+                {/* Collaboration presence bar */}
+                <div className="flex items-center justify-end mb-3 gap-2 max-w-3xl mx-auto">
+                  <CollaborationPresence scriptId={currentScriptId} />
+                  <button
+                    onClick={() => setShowComments(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
+                  >
+                    💬 评论
+                  </button>
+                </div>
+                <StoryboardPanel
+                  shots={shots}
+                  onUpdateShot={handleUpdateShot}
+                  onReorderShots={handleReorderShots}
+                  onDeleteShot={handleDeleteShot}
+                  onInsertShot={handleInsertShot}
+                  onAddShot={handleAddShot}
+                  credits={credits}
+                  onPreview={() => setShowPreview(true)}
+                  onGenerateVideo={handleGenerateVideo}
+                  onGenerateShotVideo={handleGenerateShotVideo}
+                  generatingVideoShotIds={generatingVideoShotIds}
+                  title={scriptTitle}
+                  onTitleChange={setScriptTitle}
+                  inspiration={inspiration}
+                  onCopyright={() => setShowCopyright(true)}
+                />
+              </div>
             )}
           </div>
         )}
@@ -827,6 +855,17 @@ const Index = () => {
         sceneShotsMap={sceneShotsMap}
         currentScriptId={currentScriptId}
         userId={user?.id || null}
+      />
+
+      <CommentPanel
+        visible={showComments}
+        onClose={() => setShowComments(false)}
+        scriptId={currentScriptId}
+      />
+
+      <TeamPanel
+        visible={showTeam}
+        onClose={() => setShowTeam(false)}
       />
     </div>
   );
