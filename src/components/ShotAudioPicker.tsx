@@ -56,10 +56,10 @@ export function ShotAudioPicker({ onSelect }: ShotAudioPickerProps) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-all duration-300"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-foreground/70 bg-secondary/80 border border-border hover:text-foreground hover:bg-secondary hover:border-foreground/20 transition-all duration-300"
           title="搜索音效"
         >
-          <Music size={9} strokeWidth={2} />
+          <Music size={10} strokeWidth={2} />
           选音效
         </button>
       </PopoverTrigger>
