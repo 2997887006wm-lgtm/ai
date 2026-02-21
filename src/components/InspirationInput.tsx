@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { CameraCapture } from './CameraCapture';
 import { ScriptTemplates } from './ScriptTemplates';
 import { supabase } from '@/integrations/supabase/client';
+import type { Shot } from './StoryboardCard';
 const MOODS = [
   { id: 'healing', label: '治愈', emoji: '🌿' },
   { id: 'funny', label: '搞笑', emoji: '😄' },
@@ -20,9 +21,10 @@ interface InspirationInputProps {
   onGenerate: (inspiration: string, duration: 'short' | 'long', mood: string) => void;
   onCancel?: () => void;
   isGenerating: boolean;
+  onLoadShots?: (shots: Shot[], title: string, duration: 'short' | 'long', mood: string) => void;
 }
 
-export function InspirationInput({ onGenerate, onCancel, isGenerating }: InspirationInputProps) {
+export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadShots }: InspirationInputProps) {
   const [inspiration, setInspiration] = useState('');
   const [duration, setDuration] = useState<'short' | 'long'>('short');
   const [mood, setMood] = useState('');
@@ -207,7 +209,7 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating }: Inspira
 
           <div className="w-px h-4 bg-border mx-1" />
 
-          <ScriptTemplates onUseTemplate={handleUseTemplate} />
+          <ScriptTemplates onUseTemplate={handleUseTemplate} onLoadShots={onLoadShots} />
 
           <button
             onClick={handlePolishPrompt}
