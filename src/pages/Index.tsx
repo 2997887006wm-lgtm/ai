@@ -21,7 +21,9 @@ import { Music } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
 import { useVideoPolling } from '@/hooks/useVideoPolling';
+import { logUsageEvent } from '@/lib/usageReport';
 import type { Shot } from '@/components/StoryboardCard';
+import type { ImportedShot } from '@/utils/importScript';
 
 let nextShotId = 100;
 
@@ -145,6 +147,7 @@ const Index = () => {
         return id;
       } else {
         const { data: inserted } = await supabase.from('scripts').insert(row).select('id').single();
+        if (inserted?.id) logUsageEvent('script_saved', { script_id: inserted.id });
         return inserted?.id || null;
       }
     } catch (e) {
@@ -226,7 +229,7 @@ const Index = () => {
     }
   }, []);
 
-  const handleGenerate = useCallback(async (insp: string, duration: 'short' | 'long', mood: string) => {
+  const handleGenerate = useCallback(async (insp: string, duration: 'short' | 'long', mood: string, skipRag?: boolean) => {
     setDurationType(duration);
     setIsGenerating(true);
     setInspiration(insp);
@@ -248,7 +251,7 @@ const Index = () => {
           'Authorization': `Bearer ${supabaseKey}`,
           'apikey': supabaseKey,
         },
-        body: JSON.stringify({ inspiration: insp, duration, mood }),
+        body: JSON.stringify({ inspiration: insp, duration, mood, skipRag: !!skipRag }),
         signal: controller.signal,
       });
 
@@ -380,6 +383,7 @@ const Index = () => {
         }
       }
       setPhase('style');
+      logUsageEvent('script_created', { duration });
 
       // Auto-generate title after script is created
       const allParsedShots = duration === 'long' ? Object.values(sceneShotsMap).flat() : shots;
@@ -593,6 +597,7 @@ const Index = () => {
       const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
       const jobDbId = inserted?.id || taskId;
 
+      logUsageEvent('video_generated', { type: 'merge', job_id: jobDbId });
       addJob({ id: jobDbId, taskId, prompt, status: 'processing', startedAt: Date.now() }, taskId);
       toast.info('合并成片任务已提交，预计需要2-5分钟');
       setCredits(c => Math.max(0, c - allShots.length));
@@ -642,6 +647,7 @@ const Index = () => {
       const { data: inserted } = await supabase.from('video_jobs').insert(dbRow).select('id').single();
       const jobDbId = inserted?.id || taskId;
 
+      logUsageEvent('video_generated', { type: 'shot', job_id: jobDbId, shot_number: shot.shotNumber });
       addJob({ id: jobDbId, taskId, prompt: shotPrompt, status: 'processing', startedAt: Date.now() }, taskId);
       toast.info(`镜头 #${shot.shotNumber} 视频生成已提交`);
       setCredits(c => Math.max(0, c - 1));
@@ -679,6 +685,37 @@ const Index = () => {
     ? Object.values(sceneShotsMap).flat()
     : shots;
 
+  const handleImportShots = useCallback((imported: ImportedShot[]) => {
+    const parsed: Shot[] = imported.map((s, i) => ({
+      id: nextShotId++,
+      shotNumber: s.shotNumber || String(i + 1).padStart(2, '0'),
+      shotType: s.shotType || '中景',
+      visual: s.visual || '',
+      duration: s.duration || '5s',
+      dialogue: s.dialogue || '',
+      audio: s.audio || '',
+      character: s.character || '',
+      directorNote: s.directorNote || '',
+      emotionIntensity: 50,
+    }));
+
+    if (parsed.length === 0) {
+      toast.error('导入的文件中没有有效的分镜行');
+      return;
+    }
+
+    setDurationType('short');
+    setShots(parsed);
+    setScriptTitle('');
+    setScriptTree({ id: 'root', label: '总纲', children: [] });
+    setSceneShotsMap({});
+    setActiveTreeNode(null);
+    setPhase('storyboard');
+    setActiveTab('new');
+    setShowPreview(false);
+    toast.success('已从文件导入脚本，现在可以在分镜面板中沉浸式修改');
+  }, []);
+
   return (
     <div className="flex min-h-screen w-full">
       <AppSidebar
@@ -691,7 +728,16 @@ const Index = () => {
         activeTab={activeTab}
       />
 
-      <main className="flex-1 min-h-screen bg-background overflow-y-auto">
+      <main className="relative flex-1 min-h-screen bg-background overflow-y-auto">
+        {/* 全屏淡色背景画面，保持清新不过分抢眼 */}
+        <div className="pointer-events-none fixed inset-0 -z-10">
+          <img
+            src="/placeholder.svg"
+            alt=""
+            className="h-full w-full object-cover opacity-35"
+          />
+          <div className="absolute inset-0 bg-white/65" />
+        </div>
         {activeTab === 'history' ? (
           <div className="px-12 py-16">
             <HistoryPanel onLoadScript={handleLoadScript} />
@@ -818,6 +864,8 @@ const Index = () => {
         visible={showCredits}
         credits={credits}
         onClose={() => setShowCredits(false)}
+        rechargeBaseUrl={import.meta.env.VITE_AFDIAN_RECHARGE_URL}
+        userId={user?.id}
       />
 
       <AudioLibraryPanel
@@ -832,6 +880,7 @@ const Index = () => {
         scriptTree={scriptTree}
         sceneShotsMap={sceneShotsMap}
         durationType={durationType}
+        onImport={handleImportShots}
       />
 
       <VideoSequencePlayer

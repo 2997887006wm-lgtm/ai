@@ -1,4 +1,4 @@
-import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users, Handshake, Globe } from 'lucide-react';
+import { FilePlus, ScrollText, Droplets, Video, User, LogIn, Users, Handshake, Globe, BarChart3 } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -58,6 +58,16 @@ export function AppSidebar({ credits, onNewProject, onHistory, onCreditsClick, o
         >
           <Handshake size={17} strokeWidth={1.5} />
           <span className="text-[9px] leading-none">团队协作</span>
+        </button>
+
+        {/* Report */}
+        <button
+          onClick={() => { playClick(); navigate('/report'); }}
+          className="flex flex-col items-center gap-1 w-14 py-1.5 rounded-lg text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-charcoal-light transition-all duration-300"
+          title="使用报告"
+        >
+          <BarChart3 size={17} strokeWidth={1.5} />
+          <span className="text-[9px] leading-none">使用报告</span>
         </button>
 
         {/* Community */}

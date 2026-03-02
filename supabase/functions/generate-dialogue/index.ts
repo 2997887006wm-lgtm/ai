@@ -14,7 +14,7 @@ serve(async (req) => {
     const { visual, shotType, character, duration, mode = 'dialogue', customPrompt } = await req.json();
     const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
     if (!ZHIPU_API_KEY) {
-      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
+      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY 未配置' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

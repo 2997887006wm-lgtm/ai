@@ -18,7 +18,7 @@ const MOODS = [
 ];
 
 interface InspirationInputProps {
-  onGenerate: (inspiration: string, duration: 'short' | 'long', mood: string) => void;
+  onGenerate: (inspiration: string, duration: 'short' | 'long', mood: string, skipRag?: boolean) => void;
   onCancel?: () => void;
   isGenerating: boolean;
   onLoadShots?: (shots: Shot[], title: string, duration: 'short' | 'long', mood: string) => void;
@@ -38,6 +38,7 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [highContrast, setHighContrast] = useState(false);
+  const [fastMode, setFastMode] = useState(false); // 快速模式：跳过知识库检索
   const [isPolishing, setIsPolishing] = useState(false);
 
   const handlePolishPrompt = async () => {
@@ -72,7 +73,7 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
   const handleGenerate = () => {
     if (!inspiration.trim()) return;
     playClick();
-    onGenerate(inspiration, duration, mood);
+    onGenerate(inspiration, duration, mood, fastMode);
   };
 
   const handleCancel = () => {
@@ -310,7 +311,8 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
         </div>
 
         {/* Controls row */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
           <div className="capsule-toggle" role="radiogroup" aria-label="视频时长选择">
             <button
               onClick={() => { setDuration('short'); playClick(); }}
@@ -330,6 +332,18 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
             >
               深度长片
             </button>
+          </div>
+
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none" title="跳过知识库检索，加快生成速度">
+            <input
+              type="checkbox"
+              checked={fastMode}
+              onChange={() => { setFastMode(!fastMode); playClick(); }}
+              disabled={isGenerating}
+              className="rounded border-border"
+            />
+            快速模式
+          </label>
           </div>
 
           <div className="flex items-center gap-2">

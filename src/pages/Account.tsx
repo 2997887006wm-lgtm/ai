@@ -171,6 +171,17 @@ const Account = () => {
             {profile?.credits ?? 0}
           </p>
           <p className="text-xs text-muted-foreground mt-1">每日自动获得免费额度</p>
+          <button
+            onClick={() => {
+              playClick();
+              const base = (import.meta.env.VITE_AFDIAN_RECHARGE_URL || 'https://ifdian.net/order/create?plan_id=858d43160f2811f1bb4c52540025c377&product_type=0&remark=&affiliate_code=&fr=afcom').replace(/\/$/, '');
+              const url = user?.id ? `${base}${base.includes('?') ? '&' : '?'}custom_order_id=${encodeURIComponent(user.id)}` : base;
+              window.open(url, '_blank');
+            }}
+            className="mt-2 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm"
+          >
+            5元/月 可选期限 积点=月份×50
+          </button>
         </div>
 
         {/* Sign out */}

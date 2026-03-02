@@ -45,13 +45,13 @@ serve(async (req) => {
   }
 
   try {
-    const { inspiration, duration, mood } = await req.json();
+    const { inspiration, duration, mood, skipRag } = await req.json();
     const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!ZHIPU_API_KEY) {
-      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
+      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY 未配置' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -62,10 +62,18 @@ serve(async (req) => {
       });
     }
 
-    // RAG: Search knowledge base for relevant context
+    // RAG: 需智谱 embedding，若未配置则跳过
     let ragContext = '';
-    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      ragContext = await searchKnowledge(inspiration, ZHIPU_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    if (!skipRag && ZHIPU_API_KEY && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        ragContext = await Promise.race([
+          searchKnowledge(inspiration, ZHIPU_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY),
+          new Promise<string>((_, rej) => setTimeout(() => rej(new Error('RAG timeout')), RAG_TIMEOUT_MS)),
+        ]);
+      } catch (e) {
+        if ((e as Error).message !== 'RAG timeout') console.error('RAG error:', e);
+        // 超时或失败时继续，不带 RAG 生成
+      }
     }
 
     const ragSection = ragContext
@@ -174,7 +182,6 @@ ${moodHint}${ragSection}
 直接输出 JSON 数组，不要包含任何其他内容。`;
     }
 
-    // Call Zhipu API with streaming enabled
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: {
@@ -182,6 +189,7 @@ ${moodHint}${ragSection}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        // 为了提升脚本质量，这里改用更高质量的 glm-4.6v
         model: 'glm-4.6v',
         messages: [
           { role: 'system', content: systemPrompt },
@@ -200,7 +208,7 @@ ${moodHint}${ragSection}
         });
       }
       const t = await response.text();
-      console.error('Zhipu API error:', response.status, t);
+      console.error('Chat API error:', response.status, t);
       return new Response(JSON.stringify({ error: 'AI生成失败' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

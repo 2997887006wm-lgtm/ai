@@ -1,7 +1,10 @@
+import { useRef } from 'react';
 import type { Shot } from './StoryboardCard';
 import type { TreeNode } from './DraggableScriptTree';
-import { X, FileDown, FileText, Table, Printer, FileType, Captions, ScrollText } from 'lucide-react';
+import { X, FileDown, FileText, Table, Printer, FileType, Captions, ScrollText, FileUp } from 'lucide-react';
 import { exportAsMarkdown, exportAsExcel, exportAsPdf, exportAsWord, exportAsLrc, exportAsFountain } from '@/utils/exportScript';
+import { importScriptFile, type ImportedShot } from '@/utils/importScript';
+import { toast } from 'sonner';
 
 interface ScriptPreviewSidebarProps {
   visible: boolean;
@@ -10,6 +13,7 @@ interface ScriptPreviewSidebarProps {
   scriptTree?: TreeNode;
   sceneShotsMap?: Record<string, Shot[]>;
   durationType?: 'short' | 'long';
+  onImport?: (shots: ImportedShot[]) => void;
 }
 
 /** Find the label for a scene id by traversing the tree */
@@ -24,10 +28,11 @@ function findNodeLabel(tree: TreeNode, id: string): string | null {
   return null;
 }
 
-export function ScriptPreviewSidebar({ visible, shots, onClose, scriptTree, sceneShotsMap, durationType }: ScriptPreviewSidebarProps) {
+export function ScriptPreviewSidebar({ visible, shots, onClose, scriptTree, sceneShotsMap, durationType, onImport }: ScriptPreviewSidebarProps) {
   if (!visible) return null;
 
   const isLong = durationType === 'long' && scriptTree && sceneShotsMap;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <div className="fixed inset-y-0 right-0 z-50 flex animate-slide-in-right">
@@ -37,6 +42,42 @@ export function ScriptPreviewSidebar({ visible, shots, onClose, scriptTree, scen
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-sm font-serif-cn text-foreground">全脚本预览</h3>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="从 Excel / Word 导入脚本"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-[11px]"
+            >
+              <FileUp size={13} strokeWidth={1.5} />
+              <span>导入</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.docx"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const imported = await importScriptFile(file);
+                  if (!imported.length) {
+                    toast.error('文件中没有可用的分镜数据');
+                    return;
+                  }
+                  if (!onImport) {
+                    toast.error('当前页面不支持导入到分镜面板');
+                    return;
+                  }
+                  onImport(imported);
+                  toast.success('脚本已从文件导入，可在分镜面板中继续编辑');
+                } catch (err: any) {
+                  toast.error(err?.message || '导入失败，请确认文件是从本工具导出的 Excel/Word 脚本');
+                } finally {
+                  e.target.value = '';
+                  onClose();
+                }
+              }}
+            />
             <ExportButton icon={FileText} label="Markdown" onClick={() => exportAsMarkdown(shots)} />
             <ExportButton icon={Table} label="Excel" onClick={() => exportAsExcel(shots)} />
             <ExportButton icon={FileType} label="Word" onClick={() => exportAsWord(shots)} />
