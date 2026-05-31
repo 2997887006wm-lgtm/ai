@@ -244,6 +244,118 @@ const Index = () => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+      // 长篇：前端逐场景编排。先取大纲，再逐场景调用，完成一个渲染一个，避免单请求超时。
+      if (duration === 'long') {
+        const callFn = async (body: any) => {
+          const r = await fetch(`${supabaseUrl}/functions/v1/generate-script`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          if (!r.ok) {
+            const ed = await r.json().catch(() => ({}));
+            throw new Error(ed.error || 'AI生成失败');
+          }
+          return r.json();
+        };
+
+        const toShots = (rawShots: any[]): Shot[] => rawShots.map((s: any, i: number) => ({
+          id: nextShotId++, shotNumber: String(i + 1).padStart(2, '0'),
+          shotType: s.shotType || '中景', visual: s.visual || '', duration: s.duration || '5s',
+          dialogue: s.dialogue || '', audio: s.audio || '', character: s.character || '',
+          directorNote: s.directorNote || '',
+          emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
+        }));
+
+        // 阶段一：大纲
+        setStreamText('正在规划幕与场景结构…');
+        const outline = await callFn({ inspiration: insp, duration, mood, skipRag: !!skipRag, phase: 'outline' });
+        if (controller.signal.aborted) return;
+        if (outline.ragUsed) toast.info('已参考经典电影分镜手法与自然常识知识库');
+
+        const tree = outline.tree;
+        const leaves: Array<{ id: string; label: string; actLabel: string }> = outline.leaves || [];
+        const outlineText: string = outline.outlineText || '';
+        setScriptTree(tree);
+        const firstLeaf = getFirstLeafId(tree);
+        setActiveTreeNode(firstLeaf);
+
+        const parsedMap: Record<string, Shot[]> = {};
+        let completed = 0;
+        setStreamText(`结构完成，共 ${leaves.length} 个场景，正在生成分镜…`);
+
+        // 阶段二：逐场景生成（并发 3），每完成一个立即渲染
+        const genOne = async (leaf: { id: string; label: string; actLabel: string }, index: number) => {
+          let shots: any[] = [];
+          try {
+            const res = await callFn({
+              inspiration: insp, duration, mood, skipRag: true, phase: 'scene',
+              outlineText, sceneLabel: leaf.label, actLabel: leaf.actLabel,
+              sceneIndex: index, totalScenes: leaves.length,
+            });
+            shots = Array.isArray(res.shots) ? res.shots : [];
+          } catch (err) {
+            if (controller.signal.aborted) throw err;
+            console.error(`scene ${leaf.id} failed:`, err);
+          }
+          // 占位补齐到 8 个，保证每个场景都有内容
+          while (shots.length < 8) {
+            const idx = shots.length;
+            shots.push({
+              shotType: ['中景', '近景', '特写', '全景', '远景'][idx % 5],
+              visual: `（待补充第${idx + 1}个分镜画面）`, duration: '5s', dialogue: '',
+              audio: '环境音', character: '', directorNote: '请补充此分镜的导演指示',
+              emotionIntensity: 40 + idx * 5,
+            });
+          }
+          const mapped = toShots(shots);
+          parsedMap[leaf.id] = mapped;
+          if (controller.signal.aborted) return;
+          setSceneShotsMap(prev => ({ ...prev, [leaf.id]: mapped }));
+          completed++;
+          setStreamText(`已完成场景 ${completed}/${leaves.length}…`);
+          if (leaf.id === firstLeaf) {
+            setShots(mapped);
+            generateDialogueSuggestions(mapped);
+          }
+        };
+
+        const CONCURRENCY = 3;
+        for (let i = 0; i < leaves.length; i += CONCURRENCY) {
+          if (controller.signal.aborted) return;
+          const batch = leaves.slice(i, i + CONCURRENCY);
+          await Promise.all(batch.map((leaf, j) => genOne(leaf, i + j)));
+        }
+        if (controller.signal.aborted) return;
+
+        setPhase('style');
+        logUsageEvent('script_created', { duration });
+
+        // 自动生成标题
+        const titleContext = Object.values(parsedMap).flat().slice(0, 3).map((s) => s.visual).filter(Boolean).join('；');
+        setTimeout(async () => {
+          try {
+            const { data: titleData } = await supabase.functions.invoke('generate-dialogue', {
+              body: {
+                visual: titleContext || insp || '', shotType: '标题', character: '', duration: '', mode: 'narration',
+                customPrompt: `请为以下视频脚本生成一个简短有力的中文标题（不超过15字，不加引号不加标点，只输出标题文字）：\n灵感：${insp || '无'}\n内容：${titleContext || '无'}`,
+              },
+            });
+            if (titleData?.text) {
+              setScriptTitle(titleData.text.replace(/["""''《》。，！？、：；]/g, '').trim().slice(0, 20));
+            }
+          } catch (e) {
+            console.error('Auto title generation error:', e);
+          }
+        }, 100);
+        return;
+      }
+
       const resp = await fetch(`${supabaseUrl}/functions/v1/generate-script`, {
         method: 'POST',
         headers: {
@@ -322,81 +434,25 @@ const Index = () => {
         throw new Error('脚本解析失败，请重试');
       }
 
-      if (duration === 'long') {
-        if (parsedData?.tree && parsedData?.sceneShotsMap) {
-          // Validate: every scene must have >= 5 shots
-          const ssm = parsedData.sceneShotsMap as Record<string, any[]>;
-          for (const sceneId of Object.keys(ssm)) {
-            if (!Array.isArray(ssm[sceneId])) ssm[sceneId] = [];
-            while (ssm[sceneId].length < 8) {
-              const idx = ssm[sceneId].length;
-              ssm[sceneId].push({
-                shotType: ['中景', '近景', '特写', '全景', '远景'][idx % 5],
-                visual: `（待补充第${idx + 1}个分镜画面）`,
-                duration: '5s', dialogue: '', audio: '环境音', character: '',
-                directorNote: '请补充此分镜的导演指示', emotionIntensity: 40 + idx * 5,
-              });
-            }
-          }
-
-          // Ensure every leaf node has an entry
-          const ensureLeaves = (node: any) => {
-            if (!node.children || node.children.length === 0) {
-              if (!ssm[node.id]) {
-                ssm[node.id] = Array.from({ length: 8 }, (_, i) => ({
-                  shotType: ['大远景', '中景', '近景', '特写', '全景', '远景', '中景', '近景'][i % 8],
-                  visual: `（待补充第${i + 1}个分镜画面）`, duration: '4s', dialogue: '', audio: '环境音',
-                  character: '', directorNote: '请补充此分镜的导演指示', emotionIntensity: 30 + i * 8,
-                }));
-              }
-              return;
-            }
-            for (const child of node.children) ensureLeaves(child);
-          };
-          ensureLeaves(parsedData.tree);
-
-          setScriptTree(parsedData.tree);
-          const parsedMap: Record<string, Shot[]> = {};
-          for (const [sceneId, rawShots] of Object.entries(ssm)) {
-            parsedMap[sceneId] = (rawShots as any[]).map((s: any, i: number) => ({
-              id: nextShotId++, shotNumber: String(i + 1).padStart(2, '0'),
-              shotType: s.shotType || '中景', visual: s.visual || '', duration: s.duration || '5s',
-              dialogue: s.dialogue || '', audio: s.audio || '', character: s.character || '',
-              directorNote: s.directorNote || '',
-              emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
-            }));
-          }
-          setSceneShotsMap(parsedMap);
-          const firstLeaf = getFirstLeafId(parsedData.tree);
-          setActiveTreeNode(firstLeaf);
-          if (firstLeaf && parsedMap[firstLeaf]) {
-            setShots(parsedMap[firstLeaf]);
-            generateDialogueSuggestions(parsedMap[firstLeaf]);
-          }
-        }
-      } else {
-        const shotsArr = Array.isArray(parsedData) ? parsedData : parsedData?.shots;
-        if (shotsArr && Array.isArray(shotsArr)) {
-          const parsed: Shot[] = shotsArr.map((s: any, i: number) => ({
-            id: nextShotId++, shotNumber: String(i + 1).padStart(2, '0'),
-            shotType: s.shotType || '中景', visual: s.visual || '', duration: s.duration || '5s',
-            dialogue: s.dialogue || '', audio: s.audio || '', character: s.character || '',
-            directorNote: s.directorNote || '',
-            emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
-          }));
-          setShots(parsed);
-          generateDialogueSuggestions(parsed);
-        }
+      const shotsArr = Array.isArray(parsedData) ? parsedData : parsedData?.shots;
+      if (shotsArr && Array.isArray(shotsArr)) {
+        const parsed: Shot[] = shotsArr.map((s: any, i: number) => ({
+          id: nextShotId++, shotNumber: String(i + 1).padStart(2, '0'),
+          shotType: s.shotType || '中景', visual: s.visual || '', duration: s.duration || '5s',
+          dialogue: s.dialogue || '', audio: s.audio || '', character: s.character || '',
+          directorNote: s.directorNote || '',
+          emotionIntensity: typeof s.emotionIntensity === 'number' ? s.emotionIntensity : 50,
+        }));
+        setShots(parsed);
+        generateDialogueSuggestions(parsed);
       }
       setPhase('style');
       logUsageEvent('script_created', { duration });
 
       // Auto-generate title after script is created
-      const allParsedShots = duration === 'long' ? Object.values(sceneShotsMap).flat() : shots;
       setTimeout(async () => {
         try {
-          const context = (duration === 'short' ? shots : Object.values(sceneShotsMap).flat())
-            .slice(0, 3).map(s => s.visual).filter(Boolean).join('；');
+          const context = shots.slice(0, 3).map(s => s.visual).filter(Boolean).join('；');
           const { data: titleData } = await supabase.functions.invoke('generate-dialogue', {
             body: {
               visual: context || insp || '',
