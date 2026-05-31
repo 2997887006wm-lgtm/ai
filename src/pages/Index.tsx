@@ -267,6 +267,7 @@ const Index = () => {
       let buffer = '';
       let fullContent = '';
       let ragUsed = false;
+      let streamError: string | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -290,6 +291,10 @@ const Index = () => {
             const parsed = JSON.parse(jsonStr);
             if (parsed.type === 'meta') {
               ragUsed = !!parsed.ragUsed;
+            } else if (parsed.type === 'progress' && parsed.message) {
+              setStreamText(parsed.message);
+            } else if (parsed.type === 'error') {
+              streamError = parsed.message || 'AI生成失败';
             } else if (parsed.type === 'token' && parsed.content) {
               fullContent += parsed.content;
               setStreamText(fullContent);
@@ -301,6 +306,7 @@ const Index = () => {
       }
 
       if (controller.signal.aborted) return;
+      if (streamError) throw new Error(streamError);
 
       if (ragUsed) {
         toast.info('已参考经典电影分镜手法与自然常识知识库');

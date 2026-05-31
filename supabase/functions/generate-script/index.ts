@@ -40,6 +40,206 @@ async function searchKnowledge(query: string, zhipuKey: string, supabaseUrl: str
 }
 
 const RAG_TIMEOUT_MS = 2500; // RAG 超时则跳过，避免阻塞主流程
+const ZHIPU_CHAT_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+
+// 非流式调用智谱，返回 message.content
+async function zhipuChat(
+  apiKey: string,
+  messages: Array<{ role: string; content: string }>,
+  opts: { model?: string; maxTokens?: number; temperature?: number } = {},
+): Promise<string> {
+  const resp = await fetch(ZHIPU_CHAT_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: opts.model ?? 'glm-5.1',
+      thinking: { type: 'disabled' },
+      messages,
+      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.maxTokens ?? 4000,
+    }),
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(`Zhipu ${resp.status}: ${t.slice(0, 300)}`);
+  }
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
+// 从模型输出中尽量稳健地抽取 JSON（去除 markdown 围栏、截取首尾括号）
+function extractJson(raw: string): any {
+  const c = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  try { return JSON.parse(c); } catch { /* fall through */ }
+  const candidates = [c.indexOf('{'), c.indexOf('[')].filter((i) => i >= 0);
+  const start = candidates.length ? Math.min(...candidates) : -1;
+  const end = Math.max(c.lastIndexOf('}'), c.lastIndexOf(']'));
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(c.slice(start, end + 1)); } catch { /* fall through */ }
+  }
+  return null;
+}
+
+interface LeafScene { id: string; label: string; actLabel: string; }
+
+// 收集 tree 中所有叶子场景节点（带所属幕名）
+function collectLeaves(tree: any): LeafScene[] {
+  const leaves: LeafScene[] = [];
+  const walk = (node: any, actLabel: string) => {
+    const isLeaf = !node.children || node.children.length === 0;
+    if (isLeaf) {
+      if (node.id && node.id !== 'root') leaves.push({ id: node.id, label: node.label || node.id, actLabel });
+      return;
+    }
+    const childActLabel = node.id === 'root' ? '' : (node.label || actLabel);
+    for (const child of node.children) walk(child, childActLabel);
+  };
+  walk(tree, '');
+  return leaves;
+}
+
+function sseEvent(obj: any): string {
+  return `data: ${JSON.stringify(obj)}\n\n`;
+}
+
+// 长篇模式：阶段一生成幕/场景大纲，阶段二逐场景生成分镜，规避单次输出过长被截断
+function buildLongScript(
+  apiKey: string,
+  inspiration: string,
+  mood: string,
+  moodHint: string,
+  ragSection: string,
+  ragUsed: boolean,
+): Response {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: any) => controller.enqueue(encoder.encode(sseEvent(obj)));
+      try {
+        send({ type: 'meta', ragUsed, duration: 'long' });
+        send({ type: 'progress', message: '正在规划幕与场景结构…' });
+
+        // 阶段一：生成幕/场景大纲（输出小、稳定）
+        const outlineSystem = `你是一位资深影视编剧。根据用户灵感，规划一部完整长片的幕与场景结构。
+你必须严格只输出 JSON，不要任何解释或 markdown。
+输出格式：
+{
+  "tree": {
+    "id": "root",
+    "label": "总纲",
+    "children": [
+      { "id": "act1", "label": "第一幕 · 幕名", "children": [
+        { "id": "act1-s1", "label": "场景一 · 场景名" },
+        { "id": "act1-s2", "label": "场景二 · 场景名" }
+      ] }
+    ]
+  }
+}
+要求：
+- 生成 3-4 个幕，每幕 2-4 个场景，构成完整叙事弧线（铺垫→渐升→高潮→回落）
+- id 必须唯一，格式为 actN / actN-sM
+- label 用中文，简洁点题
+- 只输出结构，不要在此处输出任何分镜内容`;
+        const outlineUser = `灵感：${inspiration}\n${moodHint}${ragSection}\n请只输出幕与场景的结构 JSON。`;
+
+        const outlineRaw = await zhipuChat(apiKey, [
+          { role: 'system', content: outlineSystem },
+          { role: 'user', content: outlineUser },
+        ], { model: 'glm-5.1', maxTokens: 2000 });
+
+        const outline = extractJson(outlineRaw);
+        const tree = outline?.tree ?? outline;
+        if (!tree || !Array.isArray(tree.children) || tree.children.length === 0) {
+          console.error('Outline parse failed:', outlineRaw.slice(0, 500));
+          send({ type: 'error', message: '大纲生成失败，请重试' });
+          controller.close();
+          return;
+        }
+        if (!tree.id) tree.id = 'root';
+        if (!tree.label) tree.label = '总纲';
+
+        const leaves = collectLeaves(tree);
+        if (leaves.length === 0) {
+          send({ type: 'error', message: '未能解析出有效场景，请重试' });
+          controller.close();
+          return;
+        }
+
+        // 全片结构概要，供逐场景生成时保持上下文连贯
+        const outlineText = tree.children.map((act: any) => {
+          const scenes = (act.children || []).map((s: any) => s.label || s.id).join('、');
+          return `${act.label || act.id}（${scenes}）`;
+        }).join('；');
+
+        send({ type: 'progress', message: `结构完成，共 ${leaves.length} 个场景，正在生成分镜…` });
+
+        // 阶段二：逐场景生成分镜（限制并发，规避限流）
+        const sceneShotsMap: Record<string, any[]> = {};
+        let done = 0;
+
+        const genScene = async (leaf: LeafScene, index: number): Promise<void> => {
+          const sceneSystem = `你是一位资深影视分镜脚本编剧。为给定的"单个场景"生成详细分镜。
+你必须严格只输出 JSON 数组，不要任何解释或 markdown。
+数组包含 8-12 个分镜对象，每个对象字段：
+- shotType: 景别（大远景/远景/全景/中景/近景/特写/大特写）
+- visual: 视觉画面描述（具体、有画面感、不超过50字）
+- duration: 预估时长（如 "5s"，每个分镜约 3-5 秒）
+- dialogue: 台词或旁白（可为空字符串）
+- audio: 听觉营造（环境音、音乐提示，需具体，用于音效匹配）
+- character: 角色侧写（可为空字符串）
+- directorNote: 导演手记（拍摄建议、情绪提示）
+- emotionIntensity: 0-100 的整数（0=平静，50=中性，100=高潮）
+- transition: 转场方式（如"硬切""叠化""淡入""淡出""闪白""跳切""渐黑""匹配剪辑"等）
+${mood ? `整体情绪风格为"${mood}"，请深度融入画面、台词、音效与导演指导。` : ''}
+- 所有自然现象需符合物理常识（光影方向、天气逻辑、动物习性等）`;
+          const sceneUser = `整片灵感：${inspiration}
+全片结构：${outlineText}
+当前场景：${leaf.actLabel ? leaf.actLabel + ' / ' : ''}${leaf.label}
+这是全片第 ${index + 1} / ${leaves.length} 个场景，请据此把握情绪强度，使全片情绪曲线符合"铺垫→渐升→高潮→回落"。${ragSection}
+请只输出该场景的 8-12 个分镜 JSON 数组${index === 0 ? '，第一个分镜的 transition 建议为"淡入"' : ''}。`;
+
+          let shots: any[] | null = null;
+          for (let attempt = 0; attempt < 2 && !shots; attempt++) {
+            try {
+              const raw = await zhipuChat(apiKey, [
+                { role: 'system', content: sceneSystem },
+                { role: 'user', content: sceneUser },
+              ], { model: 'glm-5.1', maxTokens: 4000 });
+              const parsed = extractJson(raw);
+              const arr = Array.isArray(parsed) ? parsed : parsed?.shots;
+              if (Array.isArray(arr) && arr.length > 0) shots = arr;
+            } catch (e) {
+              console.error(`scene ${leaf.id} attempt ${attempt} error:`, e);
+            }
+          }
+          sceneShotsMap[leaf.id] = shots ?? [];
+          done++;
+          send({ type: 'progress', message: `已完成场景 ${done}/${leaves.length}…` });
+        };
+
+        const CONCURRENCY = 3;
+        for (let i = 0; i < leaves.length; i += CONCURRENCY) {
+          const batch = leaves.slice(i, i + CONCURRENCY);
+          await Promise.all(batch.map((leaf, j) => genScene(leaf, i + j)));
+        }
+
+        // 输出最终结果（单个 token，前端按现有逻辑解析整段 JSON）
+        send({ type: 'token', content: JSON.stringify({ tree, sceneShotsMap }) });
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      } catch (e) {
+        console.error('buildLongScript error:', e);
+        controller.enqueue(encoder.encode(sseEvent({ type: 'error', message: '长篇生成失败，请重试' })));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+  });
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -84,84 +284,13 @@ serve(async (req) => {
 
     const moodHint = mood ? `情绪风格：${mood}。请深度融合该情绪风格到每个分镜的视觉描述、台词节奏、音效设计和导演手记中。` : '';
 
-    let systemPrompt: string;
-    let userPrompt: string;
-
+    // 长篇：两阶段生成（先大纲，再逐场景生成分镜），避免单次输出过长被截断导致只有第一幕有内容
     if (duration === 'long') {
-      systemPrompt = `你是一位资深影视编剧。根据用户提供的灵感，生成一份包含多幕多场景的完整长片分镜脚本。
-你必须严格以 JSON 格式输出，不要输出任何其他文字、解释或 markdown 标记。
+      return buildLongScript(ZHIPU_API_KEY, inspiration, mood, moodHint, ragSection, !!ragContext);
+    }
 
-输出格式：
-{
-  "tree": {
-    "id": "root",
-    "label": "总纲",
-    "children": [
-      {
-        "id": "act1",
-        "label": "第一幕 · 幕名",
-        "children": [
-          { "id": "act1-s1", "label": "场景一 · 场景名" },
-          { "id": "act1-s2", "label": "场景二 · 场景名" }
-        ]
-      },
-      {
-        "id": "act2",
-        "label": "第二幕 · 幕名",
-        "children": [
-          { "id": "act2-s1", "label": "场景三 · 场景名" }
-        ]
-      }
-    ]
-  },
-  "sceneShotsMap": {
-    "act1-s1": [
-      {
-        "shotType": "大远景",
-        "visual": "画面描述",
-        "duration": "5s",
-        "dialogue": "",
-        "audio": "环境音描述",
-        "character": "",
-        "directorNote": "导演手记",
-        "emotionIntensity": 30,
-        "transition": "淡入"
-      }
-    ],
-    "act1-s2": [...],
-    "act2-s1": [...]
-  }
-}
-
-要求：
-- 生成3-4个幕，每幕2-4个场景，形成完整的叙事弧线
-- 【极其重要·最高优先级】每个场景必须包含8-12个详细分镜！这是硬性要求，绝对不允许出现空场景或少于8个分镜的场景！每个分镜时长约3-5秒。
-- 每一幕的每一个场景都必须有完整的分镜内容，不能只有第一幕有内容而其他幕为空
-- sceneShotsMap中的每个key对应的数组必须有8-12个完整的分镜对象
-- 每个场景的id必须与tree中对应节点的id一致
-- sceneShotsMap中的key必须是叶子节点（场景节点）的id
-- sceneShotsMap中每个key对应的数组长度必须 >= 8
-- 幕节点不需要在sceneShotsMap中
-- shotType可选：大远景/远景/全景/中景/近景/特写/大特写
-- visual不超过50字，要有画面感
-- directorNote为拍摄建议和情绪提示
-- emotionIntensity为0-100的整数，代表该分镜的情绪张力（0=平静低沉，50=中性过渡，100=高潮爆发）
-- transition为转场方式建议（如"硬切"、"叠化"、"淡入"、"淡出"、"闪白"、"划变"、"跳切"、"渐黑"、"匹配剪辑"等）
-- 情绪曲线应符合戏剧结构：铺垫→渐升→高潮→回落
-- audio字段需要具体描述环境音和音效，用于后续音效匹配
-${mood ? `- 整体情绪风格为"${mood}"，请将该风格深度融入每个分镜的视觉语言、台词节奏、音效氛围和导演指导中` : ''}
-- 确保所有自然现象描述符合物理常识（如光影方向、天气逻辑、动物习性等）`;
-
-      userPrompt = `灵感：${inspiration}
-${moodHint}${ragSection}
-请生成一份深度长片的完整分镜脚本。要求：
-1. 必须包含3-4个幕，每幕2-4个场景
-2. 每个场景必须包含8-12个详细分镜，每个分镜约3-5秒（这是最重要的要求）
-3. sceneShotsMap中每个场景ID都必须有完整的分镜数组
-4. 所有幕的所有场景都必须有分镜内容，不能出现空场景
-直接输出JSON，不要包含任何其他内容。`;
-    } else {
-      systemPrompt = `你是一位资深影视分镜脚本编剧。根据用户提供的灵感，生成一份完整的分镜脚本。
+    // 短片：单次流式生成
+    const systemPrompt = `你是一位资深影视分镜脚本编剧。根据用户提供的灵感，生成一份完整的分镜脚本。
 你必须严格以 JSON 数组格式输出，不要输出任何其他文字、解释或 markdown 标记。
 每个分镜对象包含以下字段：
 - shotType: 景别（大远景/远景/全景/中景/近景/特写/大特写）
@@ -176,13 +305,12 @@ ${moodHint}${ragSection}
 ${mood ? `\n整体情绪风格为"${mood}"，请将该风格深度融入每个分镜的视觉语言、台词节奏、音效氛围和导演指导中。` : ''}
 - 确保所有自然现象描述符合物理常识（如光影方向、天气逻辑、动物习性等）`;
 
-      userPrompt = `灵感：${inspiration}
+    const userPrompt = `灵感：${inspiration}
 ${moodHint}${ragSection}
 请生成 8-12 个分镜，时长类型：轻巧短片（总计约30-60秒）。
 每个分镜时长约3-5秒，确保总分镜数不少于10个以保证叙事完整性。
 情绪曲线应有起伏，符合叙事节奏。
 直接输出 JSON 数组，不要包含任何其他内容。`;
-    }
 
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
