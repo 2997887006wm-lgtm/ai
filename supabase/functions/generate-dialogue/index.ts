@@ -51,7 +51,8 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'glm-4.6v',
+        model: 'glm-4.7-flash',
+        thinking: { type: 'disabled' },
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

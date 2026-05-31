@@ -27,7 +27,7 @@ async function searchKnowledge(query: string, zhipuKey: string, supabaseUrl: str
     const { data, error } = await supabase.rpc('match_knowledge', {
       query_embedding_text: JSON.stringify(embedding),
       match_threshold: 0.3,
-      match_count: 5,
+      match_count: 3, // 3 条足够参考，减少检索耗时
     });
 
     if (error || !data || data.length === 0) return '';
@@ -38,6 +38,8 @@ async function searchKnowledge(query: string, zhipuKey: string, supabaseUrl: str
     return '';
   }
 }
+
+const RAG_TIMEOUT_MS = 2500; // RAG 超时则跳过，避免阻塞主流程
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -189,8 +191,8 @@ ${moodHint}${ragSection}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // 为了提升脚本质量，这里改用更高质量的 glm-4.6v
-        model: 'glm-4.6v',
+        model: 'glm-5.1',
+        thinking: { type: 'disabled' },
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
