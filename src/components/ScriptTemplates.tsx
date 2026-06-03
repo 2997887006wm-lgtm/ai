@@ -157,6 +157,13 @@ export function ScriptTemplates({ onUseTemplate, onLoadShots }: ScriptTemplatesP
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
                           {t.category}
                         </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          t.duration_type === 'long'
+                            ? 'bg-scarlet/10 text-scarlet'
+                            : 'bg-secondary text-muted-foreground'
+                        }`}>
+                          {t.duration_type === 'long' ? '长篇' : '短片'}
+                        </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary/70">
                           {(t.shots as any[]).length} 个分镜
                         </span>
