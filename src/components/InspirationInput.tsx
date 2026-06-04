@@ -4,6 +4,7 @@ import { playClick } from '@/utils/audio';
 import { toast } from 'sonner';
 import { CameraCapture } from './CameraCapture';
 import { ScriptTemplates } from './ScriptTemplates';
+import { ReferenceDeconstructor } from './ReferenceDeconstructor';
 import { supabase } from '@/integrations/supabase/client';
 import type { Shot } from './StoryboardCard';
 const MOODS = [
@@ -221,6 +222,8 @@ export function InspirationInput({ onGenerate, onCancel, isGenerating, onLoadSho
           <div className="w-px h-4 bg-border mx-1" />
 
           <ScriptTemplates onUseTemplate={handleUseTemplate} onLoadShots={onLoadShots} />
+
+          <ReferenceDeconstructor onApply={(text) => { setInspiration(text); textareaRef.current?.focus(); }} />
 
           <button
             onClick={handlePolishPrompt}
