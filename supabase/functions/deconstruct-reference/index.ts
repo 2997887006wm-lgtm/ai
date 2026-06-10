@@ -252,7 +252,8 @@ serve(async (req) => {
         { role: 'user', content: userContent },
       ],
       temperature: 0.6,
-      max_tokens: 2500,
+      // glm-4v-flash 的 max_tokens 上限为 1024；文本模型可更大
+      max_tokens: model === 'glm-4v-flash' ? 1024 : 2500,
     };
     // 文本模型需显式关闭 thinking（与项目其它函数一致）；视觉模型 glm-4v-flash 不加该参数
     if (model !== 'glm-4v-flash') {
