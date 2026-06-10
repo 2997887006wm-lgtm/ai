@@ -245,17 +245,24 @@ serve(async (req) => {
       userContent = `请拆解以下爆款文案/字幕的可迁移结构与风格：\n${refText}`;
     }
 
+    const reqBody: Record<string, unknown> = {
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+      temperature: 0.6,
+      max_tokens: 2500,
+    };
+    // 文本模型需显式关闭 thinking（与项目其它函数一致）；视觉模型 glm-4v-flash 不加该参数
+    if (model !== 'glm-4v-flash') {
+      reqBody.thinking = { type: 'disabled' };
+    }
+
     const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${ZHIPU_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.6,
-      }),
+      body: JSON.stringify(reqBody),
     });
 
     if (!response.ok) {
@@ -264,7 +271,7 @@ serve(async (req) => {
       const hint = imgs.length > 0
         ? '视觉拆解失败（可能 API key 未开通视觉模型 glm-4v-flash）。可改用「仅文案」拆解。'
         : '拆解失败，请重试。';
-      return new Response(JSON.stringify({ error: hint }), {
+      return new Response(JSON.stringify({ error: hint, details: { status: response.status, body: t.slice(0, 300) } }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
