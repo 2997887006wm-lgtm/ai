@@ -220,12 +220,15 @@ serve(async (req) => {
   "style": "视觉与叙事风格（镜头语言、画面质感、剪辑特点）",
   "hook": "开头3秒的钩子手法（抽象成可复用的套路）",
   "pacing": "整体节奏特征（快慢、信息密度、反转/卡点位置）",
-  "shotPattern": ["按顺序列出关键镜头的「景别 + 作用意图 + 估算时长」，6-10条"],
+  "shotPattern": ["特写 · 制造悬念 · 2s", "中景 · 交代环境 · 3s"],
   "emotionArc": "情绪曲线走向（如何起承转合、在哪里到高潮）",
   "palette": "调色与视觉调性（色调、光线、氛围关键词）",
   "transferableStructure": "150字以内、可直接迁移到任何新选题的结构模板（可复用的创作配方）"
 }
-用中文填写所有字段的值。若关键帧是按时间顺序给出的，请据此推断镜头节奏与时长。`;
+严格要求：
+1. shotPattern 是「字符串数组」，每项是一个用 · 分隔「景别·作用·时长」的字符串，6-10 条；绝不要写成对象。
+2. 直接输出合法 JSON 本身，不要用任何 markdown 代码块或反引号包裹，JSON 前后不要加任何文字。
+3. 所有字段用中文填写。若关键帧按时间顺序给出，据此推断镜头节奏与时长。`;
 
     let model: string;
     let userContent: unknown;
@@ -309,8 +312,10 @@ serve(async (req) => {
       ].join('\n\n');
       structureBrief = safe(parsed.transferableStructure) || report;
     } else {
-      report = raw;
-      structureBrief = raw;
+      // 模型没按合法 JSON 返回：清掉代码块标记，去掉花括号噪音后直接用文本
+      const cleaned = raw.replace(/```[a-z]*\s*/gi, '').replace(/```/g, '').trim();
+      report = cleaned;
+      structureBrief = cleaned;
     }
 
     return new Response(JSON.stringify({ report, structureBrief, model, extracted, partial }), {
