@@ -29,6 +29,24 @@ function decodeText(s: string): string {
   }
 }
 
+// 带超时的 fetch（覆盖请求 + 读取响应体），避免外部站点慢/挂导致整个函数卡很久
+async function fetchWithTimeout<T>(
+  url: string,
+  opts: RequestInit,
+  ms: number,
+  read: (r: Response) => Promise<T>,
+): Promise<{ res: Response; data: T }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    const data = await read(res);
+    return { res, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // 对任意聚合解析 API 的返回 JSON 做「深度搜索」，自动挑出 无水印视频URL / 文案 / 封面。
 // 比写死字段路径更稳，兼容 Evil0ctal 的嵌套结构，也兼容其它服务。
 function deepExtract(root: any): { desc: string; cover: string; videoUrl: string } {
@@ -84,9 +102,10 @@ async function tryParseApi(url: string): Promise<{ desc: string; cover: string; 
     const endpoint = api.includes('{url}')
       ? api.replace('{url}', encodeURIComponent(url))
       : `${api}${api.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}`;
-    const res = await fetch(endpoint, { headers: { 'User-Agent': MOBILE_UA } });
+    const { res, data: j } = await fetchWithTimeout(
+      endpoint, { headers: { 'User-Agent': MOBILE_UA } }, 12000, (r) => r.json() as Promise<any>,
+    );
     if (!res.ok) { console.error('parse api status:', res.status); return null; }
-    const j: any = await res.json();
     const out = deepExtract(j);
     if (!out.desc && !out.cover && !out.videoUrl) return null;
     return out;
@@ -113,11 +132,13 @@ async function resolveShareLink(text: string): Promise<{ desc: string; cover: st
   let html = '';
   let finalUrl = url;
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': MOBILE_UA }, redirect: 'follow' });
+    const { res, data } = await fetchWithTimeout(
+      url, { headers: { 'User-Agent': MOBILE_UA }, redirect: 'follow' }, 8000, (r) => r.text(),
+    );
     finalUrl = res.url || url;
-    html = await res.text();
+    html = data;
   } catch (e) {
-    console.error('resolve fetch failed:', e);
+    console.error('resolve fetch failed/timeout:', e);
     return { desc: '', cover: '', videoUrl: '', finalUrl: url };
   }
 
@@ -150,10 +171,12 @@ async function resolveShareLink(text: string): Promise<{ desc: string; cover: st
 // 抓取封面图转 base64（避免视觉模型直接取防盗链 URL 失败）
 async function fetchImageAsDataUrl(imgUrl: string): Promise<string | null> {
   try {
-    const res = await fetch(imgUrl, { headers: { 'User-Agent': MOBILE_UA, Referer: 'https://www.douyin.com/' } });
+    const { res, data } = await fetchWithTimeout(
+      imgUrl, { headers: { 'User-Agent': MOBILE_UA, Referer: 'https://www.douyin.com/' } }, 6000, (r) => r.arrayBuffer(),
+    );
     if (!res.ok) return null;
     const ct = res.headers.get('content-type') || 'image/jpeg';
-    const buf = new Uint8Array(await res.arrayBuffer());
+    const buf = new Uint8Array(data);
     if (buf.length > 4_000_000) return null;
     let bin = '';
     for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
