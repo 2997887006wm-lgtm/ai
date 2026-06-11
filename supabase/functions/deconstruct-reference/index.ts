@@ -286,19 +286,33 @@ serve(async (req) => {
       reqBody.thinking = { type: 'disabled' };
     }
 
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ZHIPU_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(reqBody),
-    });
+    // 调用智谱，遇到 429 过载 / 5xx 自动退避重试（最多 3 次）
+    let response: Response | null = null;
+    let lastBody = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ZHIPU_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(reqBody),
+      });
+      if (response.ok) break;
+      lastBody = await response.text();
+      if ((response.status === 429 || response.status >= 500) && attempt < 3) {
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+        continue;
+      }
+      break;
+    }
 
-    if (!response.ok) {
-      const t = await response.text();
-      console.error('Zhipu API error:', response.status, t);
+    if (!response || !response.ok) {
+      const status = response?.status ?? 0;
+      console.error('Zhipu API error:', status, lastBody);
       const hint = imgs.length > 0
         ? '视觉拆解失败（可能 API key 未开通视觉模型 glm-4v-flash）。可改用「仅文案」拆解。'
-        : '拆解失败，请重试。';
-      return new Response(JSON.stringify({ error: hint, details: { status: response.status, body: t.slice(0, 300) } }), {
+        : status === 429
+          ? '模型当前访问量较大，请过几秒再试。'
+          : '拆解失败，请重试。';
+      return new Response(JSON.stringify({ error: hint, details: { status, body: lastBody.slice(0, 300) } }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
