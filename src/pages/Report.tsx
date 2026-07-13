@@ -31,7 +31,7 @@ const Report = () => {
           .eq('user_id', user.id);
 
         const countMap: Record<string, number> = {};
-        (events ?? []).forEach((e: { event_type: string }) => {
+        ((events ?? []) as Array<{ event_type: string }>).forEach((e) => {
           countMap[e.event_type] = (countMap[e.event_type] ?? 0) + 1;
         });
         setUsageEvents(
