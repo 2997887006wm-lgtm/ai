@@ -66,7 +66,7 @@ serve(async (req) => {
       });
     }
 
-    const model = Deno.env.get('ARK_VIDEO_MODEL') || 'doubao-seedance-1-0-pro-250528';
+    const model = Deno.env.get('ARK_VIDEO_MODEL') || 'doubao-seedance-1-5-pro-251215';
     const aspectRatio = ratio || '16:9';
 
     // Seedance parameters are appended to the text prompt as flags, e.g. --ratio 16:9 --dur 5
