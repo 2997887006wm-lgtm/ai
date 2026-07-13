@@ -12,9 +12,9 @@ serve(async (req) => {
 
   try {
     const { visual, shotType, imageRatio } = await req.json();
-    const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
-    if (!ZHIPU_API_KEY) {
-      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
+    const ARK_API_KEY = Deno.env.get('ARK_API_KEY');
+    if (!ARK_API_KEY) {
+      return new Response(JSON.stringify({ error: 'ARK_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -25,29 +25,33 @@ serve(async (req) => {
       });
     }
 
-    // Map ratio to CogView size
+    // Seedream 4.0 supports these size options
     const RATIO_SIZE_MAP: Record<string, string> = {
-      '16:9': '1440x720',
-      '9:16': '720x1440',
-      '1:1': '1024x1024',
-      '4:3': '1024x768',
-      '3:4': '768x1024',
+      '16:9': '2048x1152',
+      '9:16': '1152x2048',
+      '1:1': '2048x2048',
+      '4:3': '2048x1536',
+      '3:4': '1536x2048',
     };
-    const size = RATIO_SIZE_MAP[imageRatio] || '1440x720';
+    const size = RATIO_SIZE_MAP[imageRatio] || '2048x1152';
     const ratioLabel = imageRatio || '16:9';
 
     const prompt = `生成一张电影分镜参考图。景别：${shotType || '中景'}。画面描述：${visual}。风格：写实风格，电影感光影，${ratioLabel}画幅，专业摄影构图。`;
 
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/images/generations', {
+    const model = Deno.env.get('ARK_IMAGE_MODEL') || 'doubao-seedream-4-0-250828';
+
+    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${ZHIPU_API_KEY}`,
+        Authorization: `Bearer ${ARK_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'cogview-4',
+        model,
         prompt,
         size,
+        response_format: 'url',
+        watermark: false,
       }),
     });
 
@@ -63,8 +67,8 @@ serve(async (req) => {
         });
       }
       const t = await response.text();
-      console.error('Zhipu API error:', response.status, t);
-      return new Response(JSON.stringify({ error: 'AI生成失败' }), {
+      console.error('Ark Seedream API error:', response.status, t);
+      return new Response(JSON.stringify({ error: 'AI生成失败：' + t.slice(0, 200) }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -73,6 +77,7 @@ serve(async (req) => {
     const imageUrl = data.data?.[0]?.url;
 
     if (!imageUrl) {
+      console.error('No image url in Seedream response:', data);
       return new Response(JSON.stringify({ error: '未能生成图片' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

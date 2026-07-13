@@ -5,71 +5,91 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// Volcengine Ark Seedance uses async task API:
+//  POST /api/v3/contents/generations/tasks -> { id }
+//  GET  /api/v3/contents/generations/tasks/{id} -> { status, content: { video_url } }
+// Status values: queued | running | succeeded | failed | cancelled
+const ARK_BASE = 'https://ark.cn-beijing.volces.com/api/v3';
+
+function mapStatus(s: string): 'PROCESSING' | 'SUCCESS' | 'FAIL' {
+  if (s === 'succeeded') return 'SUCCESS';
+  if (s === 'failed' || s === 'cancelled') return 'FAIL';
+  return 'PROCESSING';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const ZHIPU_API_KEY = Deno.env.get('ZHIPU_API_KEY');
-    if (!ZHIPU_API_KEY) {
-      return new Response(JSON.stringify({ error: 'ZHIPU_API_KEY not configured' }), {
+    const ARK_API_KEY = Deno.env.get('ARK_API_KEY');
+    if (!ARK_API_KEY) {
+      return new Response(JSON.stringify({ error: 'ARK_API_KEY not configured' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const { action, taskId, prompt, imageUrl } = await req.json();
+    const { action, taskId, prompt, imageUrl, ratio } = await req.json();
 
-    // Poll for result
+    // Poll
     if (action === 'poll' && taskId) {
-      const pollResp = await fetch(`https://open.bigmodel.cn/api/paas/v4/async-result/${taskId}`, {
+      const pollResp = await fetch(`${ARK_BASE}/contents/generations/tasks/${taskId}`, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${ZHIPU_API_KEY}` },
+        headers: { Authorization: `Bearer ${ARK_API_KEY}` },
       });
 
       if (!pollResp.ok) {
         const t = await pollResp.text();
-        console.error('Poll error:', pollResp.status, t);
+        console.error('Ark poll error:', pollResp.status, t);
         return new Response(JSON.stringify({ error: '查询视频状态失败' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       const pollData = await pollResp.json();
-      // task_status: PROCESSING, SUCCESS, FAIL
+      const status = mapStatus(pollData.status);
+      const videoUrl = pollData.content?.video_url || null;
+
       return new Response(JSON.stringify({
-        status: pollData.task_status,
-        videoUrl: pollData.video_result?.[0]?.url || null,
-        coverUrl: pollData.video_result?.[0]?.cover_image_url || null,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        status,
+        videoUrl,
+        coverUrl: null,
+        error: pollData.error?.message || null,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Submit video generation
+    // Submit
     if (!prompt) {
       return new Response(JSON.stringify({ error: '视频描述不能为空' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const body: Record<string, unknown> = {
-      model: 'cogvideox-2',
-      prompt,
-    };
+    const model = Deno.env.get('ARK_VIDEO_MODEL') || 'doubao-seedance-1-0-pro-250528';
+    const aspectRatio = ratio || '16:9';
 
-    // If imageUrl provided, use image-to-video
+    // Seedance parameters are appended to the text prompt as flags, e.g. --ratio 16:9 --dur 5
+    const promptWithParams = `${prompt} --ratio ${aspectRatio} --resolution 1080p --dur 5`;
+
+    const content: Array<Record<string, unknown>> = [
+      { type: 'text', text: promptWithParams },
+    ];
     if (imageUrl) {
-      body.image_url = imageUrl;
+      content.push({
+        type: 'image_url',
+        image_url: { url: imageUrl },
+        role: 'first_frame',
+      });
     }
 
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/videos/generations', {
+    const response = await fetch(`${ARK_BASE}/contents/generations/tasks`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${ZHIPU_API_KEY}`,
+        Authorization: `Bearer ${ARK_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ model, content }),
     });
 
     if (!response.ok) {
@@ -84,8 +104,8 @@ serve(async (req) => {
         });
       }
       const t = await response.text();
-      console.error('CogVideoX API error:', response.status, t);
-      return new Response(JSON.stringify({ error: '视频生成请求失败' }), {
+      console.error('Seedance API error:', response.status, t);
+      return new Response(JSON.stringify({ error: '视频生成请求失败：' + t.slice(0, 200) }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -94,7 +114,7 @@ serve(async (req) => {
     const id = data.id;
 
     if (!id) {
-      console.error('No task id returned:', data);
+      console.error('No task id in Seedance response:', data);
       return new Response(JSON.stringify({ error: '视频任务创建失败' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
