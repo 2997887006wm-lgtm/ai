@@ -38,7 +38,7 @@ serve(async (req) => {
 
     const prompt = `生成一张电影分镜参考图。景别：${shotType || '中景'}。画面描述：${visual}。风格：写实风格，电影感光影，${ratioLabel}画幅，专业摄影构图。`;
 
-    const model = Deno.env.get('ARK_IMAGE_MODEL') || 'doubao-seedream-4-0-250828';
+    const model = Deno.env.get('ARK_IMAGE_MODEL') || 'doubao-seedream-5-0-pro-260628';
 
     const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
       method: 'POST',
