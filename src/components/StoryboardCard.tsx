@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2, Plus, ImagePlus, MessageSquarePlus, Mic, Loader2, Clapperboard } from 'lucide-react';
 import { playClick } from '@/utils/audio';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { VoiceOverButton } from './VoiceOverButton';
 import { ShotAudioPicker } from './ShotAudioPicker';
 import { ShotCommentButton } from './ShotCommentButton';
@@ -106,9 +107,15 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
       if (data?.error) throw new Error(data.error);
       if (data?.imageUrl) {
         setGeneratedImage(data.imageUrl);
+        onUpdate(shot.id, 'imageUrl', data.imageUrl);
+        toast.success('AI 配图已生成');
       }
     } catch (e: any) {
       console.error('Image generation error:', e);
+      const message = e?.message === 'Failed to send a request to the Edge Function'
+        ? 'AI配图请求超时或被中断，请稍后重试'
+        : e?.message || 'AI配图失败，请重试';
+      toast.error(message);
     } finally {
       setIsGeneratingImage(false);
     }

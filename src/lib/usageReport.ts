@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 /** 记录用户使用事件到 Supabase，供各页面调用 */
 export async function logUsageEvent(

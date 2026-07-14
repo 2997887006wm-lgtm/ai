@@ -2,7 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-supabase-api-version',
+  'Access-Control-Max-Age': '86400',
 };
 
 serve(async (req) => {
@@ -25,13 +27,13 @@ serve(async (req) => {
       });
     }
 
-    // Seedream 4.0 supports these size options
+    // Keep storyboard reference images compact so Seedream 5.0 Pro returns before browser/function timeouts.
     const RATIO_SIZE_MAP: Record<string, string> = {
-      '16:9': '2048x1152',
-      '9:16': '1152x2048',
-      '1:1': '2048x2048',
-      '4:3': '2048x1536',
-      '3:4': '1536x2048',
+      '16:9': '1024x576',
+      '9:16': '576x1024',
+      '1:1': '1024x1024',
+      '4:3': '1024x768',
+      '3:4': '768x1024',
     };
     const size = RATIO_SIZE_MAP[imageRatio] || '2048x1152';
     const ratioLabel = imageRatio || '16:9';
@@ -46,6 +48,7 @@ serve(async (req) => {
         Authorization: `Bearer ${ARK_API_KEY}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(110000),
       body: JSON.stringify({
         model,
         prompt,
@@ -68,7 +71,10 @@ serve(async (req) => {
       }
       const t = await response.text();
       console.error('Ark Seedream API error:', response.status, t);
-      return new Response(JSON.stringify({ error: 'AI生成失败：' + t.slice(0, 200) }), {
+      const friendly = t.includes('InvalidEndpointOrModel.NotFound')
+        ? '当前 ARK_IMAGE_MODEL 不存在或密钥无权访问，请检查 Seedream 5.0 Pro 权限'
+        : 'AI生成失败：' + t.slice(0, 200);
+      return new Response(JSON.stringify({ error: friendly }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -88,7 +94,10 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error('generate-shot-image error:', error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
+    const message = error instanceof DOMException && error.name === 'TimeoutError'
+      ? 'Seedream 配图生成超时，请稍后重试或换一个更短的画面描述'
+      : error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

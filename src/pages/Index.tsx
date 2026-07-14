@@ -641,7 +641,7 @@ const Index = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-video', {
-        body: { action: 'submit', prompt },
+        body: { action: 'submit', prompt, ratio },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -691,7 +691,7 @@ const Index = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-video', {
-        body: { action: 'submit', prompt: shotPrompt },
+        body: { action: 'submit', prompt: shotPrompt, ratio, imageUrl: shot.imageUrl },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -715,7 +715,10 @@ const Index = () => {
       setCredits(c => Math.max(0, c - 1));
     } catch (e: any) {
       console.error('Shot video generation error:', e);
-      toast.error(e.message || '视频生成失败');
+      const message = e?.message === 'Failed to send a request to the Edge Function'
+        ? '分镜视频请求失败，请稍后重试；如果刚生成配图，请等图片加载完成后再试'
+        : e?.message || '视频生成失败';
+      toast.error(message);
     } finally {
       setGeneratingVideoShotIds(prev => prev.filter(id => id !== shot.id));
     }

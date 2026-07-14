@@ -2,7 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-supabase-api-version',
+  'Access-Control-Max-Age': '86400',
 };
 
 // Volcengine Ark Seedance uses async task API:
@@ -105,7 +107,10 @@ serve(async (req) => {
       }
       const t = await response.text();
       console.error('Seedance API error:', response.status, t);
-      return new Response(JSON.stringify({ error: '视频生成请求失败：' + t.slice(0, 200) }), {
+      const friendly = t.includes('InvalidEndpointOrModel.NotFound')
+        ? '当前 ARK_VIDEO_MODEL 不存在或密钥无权访问，请检查 Seedance 1.0 Pro 权限'
+        : '视频生成请求失败：' + t.slice(0, 200);
+      return new Response(JSON.stringify({ error: friendly }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
