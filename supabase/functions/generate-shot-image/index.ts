@@ -27,13 +27,13 @@ serve(async (req) => {
       });
     }
 
-    // Keep storyboard reference images compact so Seedream 5.0 Pro returns before browser/function timeouts.
+    // Keep storyboard reference images compact while meeting Seedream 5.0 Pro's minimum area requirement.
     const RATIO_SIZE_MAP: Record<string, string> = {
-      '16:9': '1024x576',
-      '9:16': '576x1024',
+      '16:9': '1280x720',
+      '9:16': '720x1280',
       '1:1': '1024x1024',
-      '4:3': '1024x768',
-      '3:4': '768x1024',
+      '4:3': '1280x960',
+      '3:4': '960x1280',
     };
     const size = RATIO_SIZE_MAP[imageRatio] || '2048x1152';
     const ratioLabel = imageRatio || '16:9';
