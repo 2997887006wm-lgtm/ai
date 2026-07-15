@@ -59,6 +59,48 @@ export type Database = {
         }
         Relationships: []
       }
+      image_jobs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          image_ratio: string
+          image_url: string | null
+          prompt: string
+          shot_type: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+          visual: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          image_ratio?: string
+          image_url?: string | null
+          prompt: string
+          shot_type?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          visual?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          image_ratio?: string
+          image_url?: string | null
+          prompt?: string
+          shot_type?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          visual?: string | null
+        }
+        Relationships: []
+      }
       knowledge_base: {
         Row: {
           category: string
