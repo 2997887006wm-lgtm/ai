@@ -97,15 +97,25 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
 
   const pollImageJob = async (jobId: string) => {
     const maxAttempts = 80;
+    let netErrors = 0;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise(resolve => setTimeout(resolve, attempt < 2 ? 2500 : 4000));
 
-      const { data, error } = await supabase.functions.invoke('generate-shot-image', {
-        body: { action: 'poll', jobId },
-      });
-      if (error) throw new Error(error.message);
-      if (data?.error && data?.status !== 'failed') throw new Error(data.error);
+      let data: any = null;
+      try {
+        const res = await supabase.functions.invoke('generate-shot-image', {
+          body: { action: 'poll', jobId },
+        });
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      } catch (e) {
+        // 网络抖动：容忍最多 15 次，继续轮询，不要一断就放弃
+        netErrors++;
+        if (netErrors > 15) throw e;
+        continue;
+      }
 
+      if (data?.error && data?.status !== 'failed') throw new Error(data.error);
       if (data?.status === 'completed' && data?.imageUrl) {
         return data.imageUrl as string;
       }
@@ -121,10 +131,20 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
     playClick();
     setIsGeneratingImage(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-shot-image', {
-        body: { visual: shot.visual, shotType: shot.shotType, imageRatio },
-      });
-      if (error) throw new Error(error.message);
+            let data: any = null;
+      for (let tryN = 0; tryN < 3; tryN++) {
+        try {
+          const res = await supabase.functions.invoke('generate-shot-image', {
+            body: { visual: shot.visual, shotType: shot.shotType, imageRatio },
+          });
+          if (res.error) throw new Error(res.error.message);
+          data = res.data;
+          break;
+        } catch (e) {
+          if (tryN === 2) throw e;
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
       if (data?.error) throw new Error(data.error);
       if (data?.jobId && data?.status === 'processing') {
         toast.info('AI 配图任务已提交，正在后台生成');
