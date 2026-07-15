@@ -95,6 +95,27 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
 
   const IMAGE_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 
+  const pollImageJob = async (jobId: string) => {
+    const maxAttempts = 80;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, attempt < 2 ? 2500 : 4000));
+
+      const { data, error } = await supabase.functions.invoke('generate-shot-image', {
+        body: { action: 'poll', jobId },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error && data?.status !== 'failed') throw new Error(data.error);
+
+      if (data?.status === 'completed' && data?.imageUrl) {
+        return data.imageUrl as string;
+      }
+      if (data?.status === 'failed') {
+        throw new Error(data.error || 'AI配图失败，请重试');
+      }
+    }
+    throw new Error('配图仍在后台生成，请稍后再点一次或刷新查看');
+  };
+
   const handleGenerateImage = async () => {
     if (!shot.visual.trim()) return;
     playClick();
@@ -105,6 +126,14 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
+      if (data?.jobId && data?.status === 'processing') {
+        toast.info('AI 配图任务已提交，正在后台生成');
+        const imageUrl = await pollImageJob(data.jobId);
+        setGeneratedImage(imageUrl);
+        onUpdate(shot.id, 'imageUrl', imageUrl);
+        toast.success('AI 配图已生成');
+        return;
+      }
       if (data?.imageUrl) {
         setGeneratedImage(data.imageUrl);
         onUpdate(shot.id, 'imageUrl', data.imageUrl);
@@ -234,7 +263,7 @@ export function StoryboardCard({ shot, index, onUpdate, onDelete, onInsertAfter,
               title="AI 生成参考配图"
             >
               {isGeneratingImage ? <Loader2 size={11} className="animate-spin" /> : <ImagePlus size={11} strokeWidth={2} />}
-              AI配图
+              {isGeneratingImage ? '生成中' : 'AI配图'}
             </button>
           </div>
         </div>
