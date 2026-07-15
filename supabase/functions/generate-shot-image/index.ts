@@ -27,15 +27,15 @@ serve(async (req) => {
       });
     }
 
-    // Keep storyboard reference images compact while meeting Seedream 5.0 Pro's minimum area requirement.
+    // Seedream 5.0 Pro requires image size >= 3,686,400 pixels (~2K). Sizes below are chosen to just clear that threshold.
     const RATIO_SIZE_MAP: Record<string, string> = {
-      '16:9': '1280x720',
-      '9:16': '720x1280',
-      '1:1': '1024x1024',
-      '4:3': '1280x960',
-      '3:4': '960x1280',
+      '16:9': '2560x1440',
+      '9:16': '1440x2560',
+      '1:1': '2048x2048',
+      '4:3': '2400x1800',
+      '3:4': '1800x2400',
     };
-    const size = RATIO_SIZE_MAP[imageRatio] || '2048x1152';
+    const size = RATIO_SIZE_MAP[imageRatio] || '2560x1440';
     const ratioLabel = imageRatio || '16:9';
 
     const prompt = `生成一张电影分镜参考图。景别：${shotType || '中景'}。画面描述：${visual}。风格：写实风格，电影感光影，${ratioLabel}画幅，专业摄影构图。`;
